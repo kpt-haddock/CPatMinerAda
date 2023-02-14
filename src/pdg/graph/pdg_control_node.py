@@ -1,5 +1,3 @@
-import string
-
 from libadalang import AdaNode
 
 from pdg_control_edge import PDGControlEdge
@@ -10,17 +8,17 @@ from pdg_node import PDGNode
 class PDGControlNode(PDGNode):
     __control_edge: PDGControlEdge
 
-    def __init__(self, control: PDGNode, branch: string, ast_node: AdaNode, node_type: int):
+    def __init__(self, control: PDGNode, branch: str, ast_node: AdaNode, node_type: int):
         super().__init__(ast_node, node_type)
         self._control = control
         self.__control_edge = PDGControlEdge(control, self, branch)
 
     # override
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         return self.get_ast_node().kind_name
 
     # override
-    def get_exas_label(self) -> string:
+    def get_exas_label(self) -> str:
         return self.get_ast_node().kind_name
 
     # override
@@ -29,7 +27,7 @@ class PDGControlNode(PDGNode):
         return False
 
     # override
-    def to_string(self) -> string:
+    def to_string(self) -> str:
         return self.get_label()
 
     def get_body(self) -> PDGGraph:

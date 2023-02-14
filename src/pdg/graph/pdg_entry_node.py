@@ -1,21 +1,19 @@
-import string
-
 from pdg_node import PDGNode
 
 
 class PDGEntryNode(PDGNode):
-    __label: string
+    __label: str
 
-    def __init__(self, ast_node, node_type, label: string):
-        super(ast_node, node_type)
+    def __init__(self, ast_node, node_type, label: str, ast_node_type: int):
+        super().__init__(ast_node, ast_node_type)
         self.__label = label
 
     # override
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         return self.__label
 
     # override
-    def get_exas_label(self) -> string:
+    def get_exas_label(self) -> str:
         return self.__label
 
     # override
@@ -24,5 +22,5 @@ class PDGEntryNode(PDGNode):
         return False
 
     # override
-    def to_string(self) -> string:
+    def to_string(self) -> str:
         return self.get_label()

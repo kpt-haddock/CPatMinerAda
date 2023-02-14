@@ -1,8 +1,9 @@
 from __future__ import annotations
 import abc
-import string
+from typing import Final
 
 from libadalang import AdaNode
+from multimethod import multimethod
 
 from pdg_edge import PDGEdge
 from pdg_data_node import PDGDataNode
@@ -15,39 +16,42 @@ from src.utils import ada_ast_util
 
 class PDGNode:
     __metaclass__ = abc.ABCMeta
+    _PREFIX_DUMMY: Final[str] = 'dummy_'
 
     _ast_node: AdaNode
     _ast_node_type: int
-    _key: string
+    _key: str
     _control: PDGNode
-    _data_type: string
+    _data_type: str
     _in_edges: list[PDGEdge]
     _out_edges: list[PDGEdge]
 
     version: int
 
+    @multimethod
     def __init__(self, ast_node: AdaNode, ast_node_type: int):
         self._ast_node = ast_node
         self._ast_node_type = ast_node_type
 
-    def __init__(self, ast_node: AdaNode, ast_node_type: int, key: string):
+    @multimethod
+    def __init__(self, ast_node: AdaNode, ast_node_type: int, key: str):
         self.__init__(ast_node, ast_node_type)
         self._key = key
 
-    def get_data_type(self) -> string:
+    def get_data_type(self) -> str:
         return self._data_type
 
-    def get_data_name(self) -> string:
+    def get_data_name(self) -> str:
         if isinstance(self, PDGDataNode):
             return self.get_data_name()
         return None
 
     @abc.abstractmethod
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         return
 
     @abc.abstractmethod
-    def get_exas_label(self) -> string:
+    def get_exas_label(self) -> str:
         return
 
     def get_ast_node_type(self) -> int:
@@ -191,12 +195,14 @@ class PDGNode:
                     definitions.append(edge.get_source())
         return definitions
 
-    def has_in_edge(self, node: PDGNode, label: string) -> bool:
+    @multimethod
+    def has_in_edge(self, node: PDGNode, label: str) -> bool:
         for edge in self._in_edges:
             if edge.get_source() == node and edge.get_label() == label:
                 return True
         return False
 
+    @multimethod
     def has_in_edge(self, edge: PDGEdge) -> bool:
         for e in self._in_edges:
             if e.get_source() == edge.get_source() and e.get_label() == edge.get_label():
