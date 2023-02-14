@@ -1,14 +1,14 @@
-from change_initializer import CInitializer
-from change_method import CMethod
-from change_source_file import CSourceFile
+from src.change.change_initializer import ChangeInitializer
+from src.change.change_method import ChangeMethod
+from src.change.change_source_file import ChangeSourceFile
 
 
-class CRevision:
+class ChangeRevision:
     id: int
     number_of_files: int = 0
-    files: list[CSourceFile]
-    methods: list[CMethod]
-    initializers: list[CInitializer]
+    files: list[ChangeSourceFile]
+    methods: list[ChangeMethod]
+    initializers: list[ChangeInitializer]
 
     def get_id(self) -> int:
         return self.id
@@ -16,11 +16,11 @@ class CRevision:
     def get_number_of_files(self) -> int:
         return self.number_of_files
 
-    def get_files(self) -> list[CSourceFile]:
+    def get_files(self) -> list[ChangeSourceFile]:
         return self.files
 
-    def get_methods(self) -> list[CMethod]:
+    def get_methods(self) -> list[ChangeMethod]:
         return self.methods
 
-    def get_initializers(self) -> list[CInitializer]:
+    def get_initializers(self) -> list[ChangeInitializer]:
         return self.initializers
