@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import string
 from abc import abstractmethod
 
+from multimethod import multimethod
 from overrides import override
 
 from src.codemining.feature import Feature
@@ -43,6 +43,7 @@ class ExasFeature(Feature):
         self._frequency = frequency
 
     @staticmethod
+    @multimethod
     def get_feature(sequence: list[ExasSingleFeature]) -> ExasFeature:
         if len(sequence) == 1:
             return sequence[0]
@@ -56,7 +57,8 @@ class ExasFeature(Feature):
         return feature
 
     @staticmethod
-    def get_feature(label: string) -> ExasSingleFeature:
+    @multimethod
+    def get_feature(label: str) -> ExasSingleFeature:
         feature: ExasSingleFeature = ExasSingleFeature.features.get(label)
         if feature is None:
             feature = ExasSingleFeature(label)
@@ -71,7 +73,7 @@ class ExasFeature(Feature):
         pass
 
     @abstractmethod
-    def __str__(self) -> string:
+    def __str__(self) -> str:
         pass
 
     def compare_to(self, other: ExasFeature) -> int:
