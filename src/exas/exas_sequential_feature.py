@@ -1,5 +1,3 @@
-import string
-
 from overrides import override
 
 from exas_feature import ExasFeature
@@ -27,7 +25,7 @@ class ExasSequentialFeature(ExasFeature):
         return len(self.__sequence)
 
     @override
-    def __str__(self) -> string:
+    def __str__(self) -> str:
         return str(self.__sequence)
 
     @override
