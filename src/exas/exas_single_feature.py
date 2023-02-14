@@ -1,30 +1,31 @@
 from __future__ import annotations
 
-import string
-
+from multimethod import multimethod
 from overrides import override
 
 from exas_feature import ExasFeature
 
 
 class ExasSingleFeature(ExasFeature):
-    features: dict[string, ExasSingleFeature] = {}  # static
-    __label: string
+    features: dict[str, ExasSingleFeature] = {}  # static
+    __label: str
 
-    def __init__(self, label: string):
+    @multimethod
+    def __init__(self, label: str):
         super().__init__()
         self.__label = label
         type(self).features[label] = self
 
+    @multimethod
     def __init__(self, label_id: int):
         super().__init__()
         self.__label = str(label_id)
         type(self).features[self.__label] = self
 
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         return self.__label
 
-    def set_label(self, label: string):
+    def set_label(self, label: str):
         self.__label = label
 
     @override
@@ -32,7 +33,7 @@ class ExasSingleFeature(ExasFeature):
         return 1
 
     @override
-    def __str__(self) -> string:
+    def __str__(self) -> str:
         return self.__label
 
     @override
