@@ -1,5 +1,3 @@
-import string
-
 from change_node import ChangeNode
 from src.pdg.graph.pdg_edge import PDGEdge
 
@@ -7,7 +5,7 @@ from src.pdg.graph.pdg_edge import PDGEdge
 class ChangeEdge:
     source: ChangeNode
     target: ChangeNode
-    label: string
+    label: str
 
     def __init__(self, source: ChangeNode, target: ChangeNode, e: PDGEdge):
         self.source = source
@@ -22,11 +20,11 @@ class ChangeEdge:
     def get_target(self) -> ChangeNode:
         return self.target
 
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         return self.label
 
     def is_mapped(self) -> bool:
         return self.label == '_map_'
 
-    def to_string(self) -> string:
+    def to_string(self) -> str:
         return self.label
