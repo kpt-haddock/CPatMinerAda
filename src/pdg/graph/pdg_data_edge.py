@@ -1,4 +1,3 @@
-import string
 from enum import Enum
 from pdg_node import PDGNode
 from pdg_edge import PDGEdge
@@ -28,7 +27,7 @@ class PDGDataEdge(PDGEdge):
         return self._type
 
     # override
-    def get_label(self) -> string:
+    def get_label(self) -> str:
         match self._type:
             case Type.RECEIVER:
                 return 'recv'
@@ -50,7 +49,7 @@ class PDGDataEdge(PDGEdge):
                 return ''
 
     # override
-    def get_exas_label(self) -> string:
+    def get_exas_label(self) -> str:
         match self._type:
             case Type.RECEIVER:
                 return '_recv_'
@@ -72,5 +71,5 @@ class PDGDataEdge(PDGEdge):
                 return '_data_'
 
     # override
-    def to_string(self) -> string:
+    def to_string(self) -> str:
         return self.get_label()

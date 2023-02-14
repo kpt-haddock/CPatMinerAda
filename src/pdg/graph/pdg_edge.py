@@ -1,4 +1,3 @@
-import string
 from pdg_node import PDGNode
 import abc
 
@@ -14,8 +13,8 @@ class PDGEdge:
         self._target = target
 
     @abc.abstractmethod
-    def get_label(self) -> string:
-        return
+    def get_label(self) -> str:
+        ...
 
     def get_source(self) -> PDGNode:
         return self._source
@@ -24,6 +23,6 @@ class PDGEdge:
         return self._target
 
     @abc.abstractmethod
-    def get_exas_label(self) -> string:
-        return
+    def get_exas_label(self) -> str:
+        ...
 
