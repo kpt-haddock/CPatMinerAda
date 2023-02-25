@@ -20,6 +20,9 @@ class GitConnector:
     def __init__(self, url: str):
         self.__url = url
 
+    def get_repository(self) -> Repo:
+        return self.__repository
+
     @multimethod
     def get_number_of_commits(self) -> int:
         return self.__number_of_commits
