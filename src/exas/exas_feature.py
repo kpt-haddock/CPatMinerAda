@@ -6,8 +6,6 @@ from multimethod import multimethod
 from overrides import override
 
 from src.codemining.feature import Feature
-from exas_sequential_feature import ExasSequentialFeature
-from exas_single_feature import ExasSingleFeature
 
 
 class ExasFeature(Feature):
@@ -89,3 +87,96 @@ class ExasFeature(Feature):
             if c != 0:
                 return c
         return 0
+
+class ExasSequentialFeature(ExasFeature):
+    __sequence: list[ExasSingleFeature] = []
+
+    def __init__(self, sequence: list[ExasSingleFeature], pre: ExasFeature, single_feature: ExasSingleFeature):
+        super().__init__()
+        self.__sequence = sequence.copy()
+        pre._next[single_feature] = self
+        if len(pre._next) > type(self)._number_of_branches:
+            type(self)._number_of_branches = len(pre._next)
+
+    def get_sequence(self) -> list[ExasSingleFeature]:
+        return self.__sequence
+
+    def set_sequence(self, sequence: list[ExasSingleFeature]):
+        self.__sequence = sequence
+
+    @override
+    def get_feature_length(self) -> int:
+        return len(self.__sequence)
+
+    @override
+    def __str__(self) -> str:
+        return str(self.__sequence)
+
+    @override
+    def __hash__(self) -> int:
+        if self._hash is None and len(self.__sequence) > 0:
+            for i in range(len(self.__sequence)):
+                self._hash = 31 * self._hash + hash(self.__sequence[i])
+        return self._hash
+
+    @override
+    def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        if other == self:
+            return True
+        if isinstance(other, ExasSequentialFeature):
+            if self.get_feature_length() != other.get_feature_length():
+                return False
+            for i in range(self.get_feature_length()):
+                if self.__sequence[i] != other.__sequence[i]:
+                    return False
+            return True
+        return False
+
+
+class ExasSingleFeature(ExasFeature):
+    features: dict[str, ExasSingleFeature] = {}  # static
+    __label: str
+
+    @multimethod
+    def __init__(self, label: str):
+        super().__init__()
+        self.__label = label
+        type(self).features[label] = self
+
+    @multimethod
+    def __init__(self, label_id: int):
+        super().__init__()
+        self.__label = str(label_id)
+        type(self).features[self.__label] = self
+
+    def get_label(self) -> str:
+        return self.__label
+
+    def set_label(self, label: str):
+        self.__label = label
+
+    @override
+    def get_feature_length(self) -> int:
+        return 1
+
+    @override
+    def __str__(self) -> str:
+        return self.__label
+
+    @override
+    def __hash__(self) -> int:
+        if self._hash is None and len(self.__label) > 0:
+            self._hash = hash(self.__label)
+        return self._hash
+
+    @override
+    def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        if other == self:
+            return True
+        if isinstance(other, ExasSingleFeature):
+            return self.__label == other.get_label()
+        return False
