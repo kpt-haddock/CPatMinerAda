@@ -222,7 +222,7 @@ class ChangeAnalyzer:
                     cgs: dict[str, ChangeGraph] = change_graphs[e.get_change_file().get_path()]
                     if cgs is None:
                         cgs = dict()
-                        change_graphs[e.get_change_file().get_path(), cgs]
+                        change_graphs[e.get_change_file().get_path()] = cgs
                     cgs['{},{},{},'.format(e.get_change_class().get_name(), e.get_simple_name(), e.get_parameter_types(), e._start_line)] = change_graph
                 e.clean_for_stats()
             if len(change_graphs) > 0:
@@ -629,6 +629,56 @@ class ChangeClass(ChangeEntity):
 
     def get_full_qualifier_name(self) -> str:
         return self.get_qualifier_name
+
+    @staticmethod
+    def map(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
+            mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
+        raise NotImplementedError('ChangeClass map')
+
+    @staticmethod
+    def map_all(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
+                mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
+        class_with_name_m: dict[str, ChangeClass] = dict()
+        class_with_name_n: dict[str, ChangeClass] = dict()
+        for change_class in classes_m:
+            class_with_name_m[change_class.get_simple_name()] = change_class
+        for change_class in classes_n:
+            class_with_name_n[change_class.get_simple_name()] = change_class
+        intersection_names: set[str] = set(class_with_name_m.keys()).intersection(set(class_with_name_n.keys()))
+        for name in intersection_names:
+            change_class_m: ChangeClass = class_with_name_m[name]
+            change_class_n: ChangeClass = class_with_name_n[name]
+            self.set_map(change_class_m, change_class_n)
+            mapped_classes_m.add(change_class_m)
+            mapped_classes_n.add(change_class_n)
+            classes_m.remove(change_class_m)
+            classes_n.remove(change_class_n)
+
+        # map other classes?
+        if classes_m and classes_n:
+            temporary_mapped_classes_m: set[ChangeClass] = set()
+            temporary_mapped_classes_n: set[ChangeClass] = set()
+            self.map(classes_m, classes_n, temporary_mapped_classes_m, temporary_mapped_classes_n)
+            mapped_classes_m.update(temporary_mapped_classes_m)
+            mapped_classes_n.update(temporary_mapped_classes_n)
+            classes_m = classes_m - temporary_mapped_classes_m
+            classes_n = classes_n - temporary_mapped_classes_n
+            
+        
+
+    def derive_changes(self):
+        ...
+
+    @multimethod
+    def print_changes(self, stream):
+        ...
+
+    @multimethod
+    def print_changes(self, stream, l):
+        ...
+
+    def has_changed_name(self) -> bool:
+        ...
 
     def __str__(self) -> str:
         return self.get_name()

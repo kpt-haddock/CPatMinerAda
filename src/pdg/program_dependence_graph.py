@@ -533,7 +533,7 @@ class PDGDataNode(PDGNode):
         self._is_declaration = node._is_declaration
 
     @override
-    def to_string(self) -> str:
+    def __str__(self) -> str:
         return self.get_label()
 
 
