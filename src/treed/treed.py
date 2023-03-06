@@ -245,6 +245,16 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __get_not_yet_mapped_descendant_containers(self, node: AdaNode) -> list[AdaNode]:
+        children: list[AdaNode] = []
+        for child in self.__tree[node]:
+            if child not in self.__pivots_m and child not in self.__pivots_n and self.__tree_height[child] >= MIN_HEIGHT:
+                if len(self.__tree_map[child]) == 0:
+                    children.append(child)
+                else:
+                    children.extend(self.__get_not_yet_mapped_descendant_containers(child))
+        return children                
+
     @multimethod
     def __build_tree(self, visit_doc_tags: bool):
         self.__build_tree(self.__ast_m, visit_doc_tags)
