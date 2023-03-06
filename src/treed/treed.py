@@ -1,6 +1,6 @@
 from typing import Optional
 
-from libadalang import AdaNode
+from libadalang import AdaNode, Identifier
 from multimethod import multimethod
 
 PROPERTY_MAP: str          = "m"
@@ -20,12 +20,14 @@ STATUS_MOVED: int          = 3
 
 class TreedBuilder:
     __root: AdaNode
+    __visit_doc_tags: bool
     tree: dict[AdaNode, list[AdaNode]] = dict()
     tree_height: dict[AdaNode, int] = dict()
     tree_depth: dict[AdaNode, int] = dict()
 
-    def __init__(self, root: AdaNode):
+    def __init__(self, root: AdaNode, visit_doc_tags: bool):
         self.__root = root
+        self.__visit_doc_tags = visit_doc_tags
         self.tree_depth[root] = 0
 
     def pre_visit(self, node: AdaNode):
@@ -99,7 +101,11 @@ class TreedMapper:
     def map(self, visit_doc_tags: bool):
         self.__visit_doc_tags = visit_doc_tags
         self.__build_trees(visit_doc_tags)
-        self.
+        self.__map_pivots()
+        self.__map_bottom_up()
+        self.__map_moving()
+        self.__map_top_down()
+        self.__mark_changes()
 
     @multimethod
     def print_changes(self):
@@ -235,10 +241,23 @@ class TreedMapper:
 
 
     def __check_name_map(self, name_m: str, name_n: str):
-        if node_m == node_n:
+        if name_m == name_n:
             return True
         return name_n == self.__rename_map.get(name_m, None)
+
+    @multimethod
+    def __build_tree(self, visit_doc_tags: bool):
+        self.__build_tree(self.__ast_m, visit_doc_tags)
+        self.__build_tree(self.__ast_n, visit_doc_tags)
         
+    @multimethod
+    def __build_tree(self, root: AdaNode, visit_doc_tags: bool):
+        visitor: TreedBuilder = TreedBuilder(root, visit_doc_tags)
+        # root.accept(visitor) TODO
+        self.tree.update(visitor.tree)
+        self.__tree_height.update(visitor.tree_height)
+        self.__tree_depth.update(visitor.tree_depth)
+        self.__tree_vector.update(visitor.tree_vector)
 
 class TreedUtils:
 
