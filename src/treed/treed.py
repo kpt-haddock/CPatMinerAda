@@ -245,6 +245,17 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __max_height(self, nodes: list[AdaNode], maxima: list[AdaNode]):
+        maximum: int = 0
+        for node in nodes:
+            h: int = self.__tree_height[node]
+            if h >= maximum:
+                if h > maximum:
+                    maximum = h
+                    maxima.clear()
+                maxima.append(node)
+        return maximum
+
     def __map_unchanged_nodes(self, node_m: AdaNode, node_n: AdaNode):
         self.__set_map(node_m, node_n, 1.0)
         children_m: list[AdaNode] = self.__tree[node_m]
