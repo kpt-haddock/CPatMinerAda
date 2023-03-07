@@ -245,6 +245,13 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __map_unchanged_nodes(self, node_m: AdaNode, node_n: AdaNode):
+        self.__set_map(node_m, node_n, 1.0)
+        children_m: list[AdaNode] = self.__tree[node_m]
+        children_n: list[AdaNode] = self.__tree[node_n]
+        for i in range(0, len(children_m)):
+            self.__map_unchanged_nodes(children_m[i], children_n[i])
+
     def __get_not_yet_matched_nodes(self, nodes: list[AdaNode]):
         not_yet_mapped_nodes: list[AdaNode] = []
         for node in nodes:
