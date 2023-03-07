@@ -161,7 +161,7 @@ class TreedMapper:
                 del self.__rename_map[name_m]
                 continue
             for iname in imap[name_n]:
-                if self__is_same_name(iname, name_n):
+                if self.__is_same_name(iname, name_n):
                     del self.__rename_map[name_m]
                     break
 
@@ -208,9 +208,11 @@ class TreedMapper:
                 node: AdaNode = nodes[i - 1]
                 node2: AdaNode = mapped_nodes[j - 1]
                 if TreedUtils.build_label_for_vector(node) == TreedUtils.build_label_for_vector(node2):
-                    # node.set_property???
+                    ...
+                    # node.set_property??? TODO
                     # node2.set_property???
                 else:
+                    ...
                     # node.set_property???
                     # node2.set_property???
                 i -= 1
@@ -244,6 +246,21 @@ class TreedMapper:
         if name_m == name_n:
             return True
         return name_n == self.__rename_map.get(name_m, None)
+
+    def __get_not_yet_mapped_ancestors(self, node: AdaNode, ancestors: list[AdaNode]):
+        parent: AdaNode = node.parent
+        if len(self.__tree_map[parent]) == 0:
+            ancestors.append(parent)
+            self.__get_not_yet_mapped_ancestors(parent, ancestors)
+
+    @multimethod
+    def __map_top_down(self):
+        self.__map_top_down(self.__ast_m)
+
+    @multimethod
+    def __map_top_down(self, node_m: AdaNode):
+        #  TODO
+        ...
 
     def __max_height(self, nodes: list[AdaNode], maxima: list[AdaNode]):
         maximum: int = 0
