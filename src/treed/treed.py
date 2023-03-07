@@ -245,6 +245,50 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __get_not_yet_matched_nodes(self, nodes: list[AdaNode]):
+        not_yet_mapped_nodes: list[AdaNode] = []
+        for node in nodes:
+            if len(self.__tree_map[node]) == 0:
+                not_yet_mapped_nodes.append(node)
+        return not_yet_mapped_nodes
+
+    @multimethod
+    def __map_moving(self):
+        ...
+
+    @multimethod
+    def __map_moving(self, ast_m: AdaNode, ast_n: AdaNode):
+        list_m: list[AdaNode] = self.__get_not_yet_mapped_descendant_containers(ast_m)
+        list_n: list[AdaNode] = self.__get_not_yet_mapped_descendant_containers(ast_n)
+        heights_m: list[AdaNode] = list_m.copy()
+        heights_n: list[AdaNode] = list_n.copy()
+        heights_m.sort(key=lambda x: self.__tree_height[x], reverse=True)
+        heights_n.sort(key=lambda x: self.__tree_height[x], reverse=True)
+        self.__map_moving(list_m, list_n, heights_m, heights_n)
+
+    @multimethod
+    def __map_moving(self, list_m: list[AdaNode], list_n: list[AdaNode], heights_m: list[AdaNode], heights_n: list[AdaNode]):
+        mapped_nodes: list[AdaNode] = self.__map(list_m, list_n, MIN_SIMILARITY_MOVE)
+        for i in range(0, len(mapped_nodes), 2):
+            node_m: AdaNode = mapped_nodes[i]
+            node_n: AdaNode = mapped_nodes[i + 1]
+            list_m.remove(node_m)
+            list_n.remove(node_n)
+            heights_m.remove(node_m)
+            heights_n.remove(node_n)
+        while len(list_m) > 0 and len(list_n) > 0:
+            height_m: int = self.__tree_height[heights_m[0]]
+            height_n: int = self.__tree_height[heights_n[0]]
+            expanded_m: bool = False
+            expanded_n: bool = False
+            if height_m >= height_n:
+                expanded_m = self.__expand_for_moving(list_m, heights_m, height_m)
+            if height_n >= height_m:
+                expanded_n = self.__expand_for_moving(list_n, heights_n, height_n)
+            if expanded_m or expanded_n:
+                self.__map_moving(list_m, list_n, heights_m, heights_n)
+                break
+
     def __get_not_yet_mapped_descendant_containers(self, node: AdaNode) -> list[AdaNode]:
         children: list[AdaNode] = []
         for child in self.__tree[node]:
