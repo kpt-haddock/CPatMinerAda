@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, T
 
 from libadalang import AdaNode, Identifier
 from multimethod import multimethod
@@ -246,6 +246,13 @@ class TreedMapper:
         if name_m == name_n:
             return True
         return name_n == self.__rename_map.get(name_m, None)
+
+    @staticmethod
+    def __length(self, vector: dict[T, int]) -> int:
+        length: int = 0
+        for value in vector.values():
+            length += value
+        return length
 
     def __get_not_yet_mapped_ancestors(self, node: AdaNode, ancestors: list[AdaNode]):
         parent: AdaNode = node.parent
