@@ -3,6 +3,8 @@ from typing import Optional, T
 from libadalang import AdaNode, Identifier
 from multimethod import multimethod
 
+from src.utils.pair import Pair
+
 PROPERTY_MAP: str          = "m"
 PROPERTY_STATUS: str       = "s"
 
@@ -247,8 +249,36 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __compute_vector_similarity(self, l1: list[AdaNode], l2: list[AdaNode]):
+        similarities: list[float] = [0.0 for _ in range(max(len(l1), len(l2)))]
+        pairs_of_node: dict[AdaNode, set[Pair]] = dict()
+        pairs: list[Pair] = []
+        for node1 in l1:
+            pairs1: set[Pair] = set()
+            for node2 in l2:
+                similarity: float = self.__compute_similarity(self.__tree_vector[node1], self.__tree_vector[node2])
+                if similarity > 0:
+                    pair: Pair = Pair(node1, node2, similarity)
+                    pairs1.add(pair)
+                    pairs2: set[Pair] = pairs_of_node.get(node2, set())
+                    pairs2.add(pair)
+                    pairs_of_node[node2] = pairs2
+                    pairs.append(pair)
+            pairs_of_node[node1] = pairs1
+        pairs.sort(reverse=True)
+        i: int = 0
+        while pairs:
+            pair: Pair = pairs[0]
+            similarities[i] = pair.get_weight()
+            for p in pairs_of_node[pair.get_object1()]:
+                pairs.remove(p)
+            for p in pairs_of_node[pair.get_object2()]:
+                pairs.remove(p)
+        return similarities
+
+
     @staticmethod
-    def __compute_similarity(self, vector_m: dict[str, int], vector_n: dict[str, int]) -> float:
+    def __compute_similarity(vector_m: dict[str, int], vector_n: dict[str, int]) -> float:
         similarity: float = 0.0
         keys: set[str] = set(vector_m.keys()).intersection(set(vector_n.keys()))
         for key in keys:
