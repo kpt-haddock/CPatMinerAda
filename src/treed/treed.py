@@ -248,6 +248,15 @@ class TreedMapper:
         return name_n == self.__rename_map.get(name_m, None)
 
     @staticmethod
+    def __compute_similarity(self, vector_m: dict[str, int], vector_n: dict[str, int]) -> float:
+        similarity: float = 0.0
+        keys: set[str] = set(vector_m.keys()).intersection(set(vector_n.keys()))
+        for key in keys:
+            similarity += min(vector_m[key], vector_n[key])
+        similarity = 2 * (similarity + SIMILARITY_SMOOTH) / (len(vector_m) + len(vector_n) + 2 * SIMILARITY_SMOOTH)
+        return similarity
+
+    @staticmethod
     def __length(self, vector: dict[T, int]) -> int:
         length: int = 0
         for value in vector.values():
