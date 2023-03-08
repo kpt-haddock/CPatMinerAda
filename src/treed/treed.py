@@ -1,4 +1,4 @@
-from typing import Optional, T
+from typing import Optional, T, cast
 
 from libadalang import AdaNode, Identifier
 from multimethod import multimethod
@@ -249,7 +249,49 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
-    def __compute_vector_similarity(self, l1: list[AdaNode], l2: list[AdaNode]):
+    def __map(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], threshold: float) -> list[AdaNode]:
+        pairs_of_ancestor: dict[AdaNode, set[Pair]] = dict()
+        pairs: list[Pair] = []
+        for node_m in nodes_m:
+            pairs1: set[Pair] = set()
+            for node_n in nodes_n:
+                similarity: float = self.__compute_similarity(node_m, node_n, threshold)
+                if similarity >= threshold:
+                    # The original example uses start position and not line number TODO
+                    pair: Pair = Pair(node_m, node_n, similarity,
+                                      - abs((node_m.parent.sloc_range.start.line - node_m.sloc_range.start.line) -
+                                            (node_n.parent.sloc_range.start.line - node_n.sloc_range.start.line)))
+                    pairs1.add(pair)
+                    pairs2: set[Pair] = pairs_of_ancestor.get(node_n, set())
+                    pairs2.add(pair)
+                    pairs_of_ancestor[node_n] = pairs2
+                    pairs.append(pair)
+            pairs_of_ancestor[node_m] = pairs1
+        pairs.sort(reverse=True)
+        nodes: list[AdaNode] = []
+        while pairs:
+            pair: Pair = pairs[0]
+            node_m: AdaNode = cast(AdaNode, pair.get_object1())
+            node_n: AdaNode = cast(AdaNode, pair.get_object2())
+            self.__set_map(node_m, node_n, pair.get_weight())
+            nodes.append(node_m)
+            nodes.append(node_n)
+            for p in pairs_of_ancestor.get(node_m):
+                pairs.remove(p)
+            for p in pairs_of_ancestor.get(node_n):
+                pairs.remove(p)
+        return nodes
+
+    def __set_map(self, node_m: AdaNode, node_n: AdaNode, w: float):
+        self.__tree_map[node_m][node_n] = w
+        self.__tree_map[node_n][node_m] = w
+
+    @multimethod
+    def __compute_similarity(self, node_m: AdaNode, node_n: AdaNode, threshold: float) -> float:
+        # TODO: line 635 TreedMapper.java
+        ...
+
+    def __compute_vector_similarity(self, l1: list[AdaNode], l2: list[AdaNode]) -> list[float]:
         similarities: list[float] = [0.0 for _ in range(max(len(l1), len(l2)))]
         pairs_of_node: dict[AdaNode, set[Pair]] = dict()
         pairs: list[Pair] = []
@@ -278,6 +320,7 @@ class TreedMapper:
 
 
     @staticmethod
+    @multimethod
     def __compute_similarity(vector_m: dict[str, int], vector_n: dict[str, int]) -> float:
         similarity: float = 0.0
         keys: set[str] = set(vector_m.keys()).intersection(set(vector_n.keys()))
