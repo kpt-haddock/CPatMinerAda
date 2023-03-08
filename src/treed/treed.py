@@ -259,7 +259,12 @@ class TreedMapper:
         # TODO original code uses start position and not line no.
         return node1.sloc_range.start.line - node2.sloc_range.start.line
 
-    
+    def __get_children_containers(self, node: AdaNode) -> list[AdaNode]:
+        children: list[AdaNode] = []
+        for child in self.__tree.get(node):
+            if self.__tree_height.get(child) >= MIN_HEIGHT:
+                children.append(child)
+        return children
 
     def __map_bottom_up(self):
         heights_m: list[AdaNode] = list(self.__pivots_m)
