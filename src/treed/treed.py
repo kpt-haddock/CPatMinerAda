@@ -186,7 +186,7 @@ class TreedMapper:
     @multimethod
     def __mark_changes(self, nodes: list[AdaNode], mapped_nodes: list[AdaNode]):
         d: list[list[int]] = [[0 for _ in range(len(mapped_nodes) + 1)] for _ in range(2)]
-        p: list[list[str]] = [[None for _ in range(len(mapped_nodes) + 1)] for _ in range(len(nodes))]
+        p: list[list[str]] = [[None for _ in range(len(mapped_nodes) + 1)] for _ in range(len(nodes) + 1)]
         for i in range(1, len(nodes) + 1):
             node: AdaNode = nodes[i - 1]
             maps: dict[AdaNode, float] = self.__tree_map[node]
@@ -258,6 +258,42 @@ class TreedMapper:
             return d
         # TODO original code uses start position and not line no.
         return node1.sloc_range.start.line - node2.sloc_range.start.line
+
+    def __lcs(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], lcs_m: list[int], lcs_n: list[int]):
+        d: list[list[int]] = [[0 for _ in range(len(nodes_n) + 1)] for _ in range(2)]
+        p: list[list[str]] = [[None for _ in range(len(nodes_m) + 1)] for _ in range(len(nodes_n) + 1)]
+        for i in reversed(range(0, len(nodes_m))):
+            node_m: AdaNode = nodes_m[i]
+            height_m: int = self.__tree_height.get(node_m)
+            vector_m: dict[str, int] = self.__tree_vector.get(node_m)
+            for j in range(0, len(nodes_n)):
+                d[0][j] = d[1][j]
+            for j in reversed(range(0, len(nodes_n))):
+                node_n: AdaNode = nodes_n[j]
+                height_n: int = self.__tree_height.get(node_n)
+                vector_n: dict[str, int] = self.__tree_vector.get(node_n)
+                # TODO: sub tree match
+                if height_m == height_n and vector_m == vector_n and node_m.:
+                    d[1][j] = d[0][j + 1] + 1
+                    p[i][j] = 'D'
+                elif d[0][j] >= d[1][j + 1]:
+                    d[1][j] = d[0][j]
+                    p[i][j] = 'U'
+                else:
+                    d[1][j] = d[1][j + 1]
+                    p[i][j] = 'R'
+        i: int = 0
+        j: int = 0
+        while i < len(nodes_m) and j < len(nodes_n):
+            if p[i][j] == 'D':
+                lcs_m.append(i)
+                lcs_n.append(j)
+                i += 1
+                j += 1
+            elif p[i][j] == 'U':
+                i += 1
+            else:
+                j += 1
 
     def __get_children_containers(self, node: AdaNode) -> list[AdaNode]:
         children: list[AdaNode] = []
