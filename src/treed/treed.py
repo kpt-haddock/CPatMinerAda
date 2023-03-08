@@ -249,6 +249,30 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __compare_nodes(self, node1: AdaNode, node2: AdaNode) -> int:
+        d: int = self.__tree_height.get(node2) - self.__tree_height.get(node1)
+        if d != 0:
+            return d
+        d = self.__tree_depth.get(node1) - self.__tree_depth.get(node2)
+        if d != 0:
+            return d
+        # TODO original code uses start position and not line no.
+        return node1.sloc_range.start.line - node2.sloc_range.start.line
+
+    
+
+    def __map_bottom_up(self):
+        heights_m: list[AdaNode] = list(self.__pivots_m)
+        heights_m.sort(key=self.__compare_nodes)
+        for node_m in heights_m:
+            node_n: AdaNode = next(iter(self.__tree_map.get(node_m).keys()))
+            ancestors_m: list[AdaNode] = []
+            ancestors_n: list[AdaNode] = []
+            self.__get_not_yet_mapped_ancestors(node_m, ancestors_m)
+            self.__get_not_yet_mapped_ancestors(node_n, ancestors_n)
+            self.__map(ancestors_m, ancestors_n, MIN_SIMILARITY)
+        
+
     def __map(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], threshold: float) -> list[AdaNode]:
         pairs_of_ancestor: dict[AdaNode, set[Pair]] = dict()
         pairs: list[Pair] = []
