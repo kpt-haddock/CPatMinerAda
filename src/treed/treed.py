@@ -250,6 +250,28 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __expand_for_pivots(self, node_list: list[AdaNode], heights: list[AdaNode], h: int) -> bool:
+        nodes: set[AdaNode] = set()
+        for node in heights:
+            if self.__tree_height.get(node) == h:
+                nodes.add(node)
+            else:
+                break
+        expanded: bool = False
+        for i in reversed(range(0, len(node_list))):
+            node: AdaNode = node_list[i]
+            if node in nodes:
+                del node_list[i]
+                del heights[0]
+                children: list[AdaNode] = self.__get_children_containers(node)
+                if children:
+                    expanded = True
+                    for j in range(0, len(children)):
+                        child: AdaNode = children[j]
+                        node_list.append(child)
+                        insort(heights, child, key=lambda n: self.__tree_height.get(n) * -1)
+        return expanded
+
     def __expand_for_moving(self, node_list: list[AdaNode], heights: list[AdaNode], h: int) -> bool:
         nodes: set[AdaNode] = set()
         for node in heights:
@@ -259,7 +281,7 @@ class TreedMapper:
                 break
         expanded: bool = False
         for i in reversed(range(0, len(node_list))):
-            node: AdaNode = node_list.get(i)
+            node: AdaNode = node_list[i]
             if node in nodes:
                 del node_list[i]
                 del heights[0]
