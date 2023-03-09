@@ -1,25 +1,25 @@
 from bisect import insort
-from typing import Optional, T, cast
+from typing import Optional, cast
 
-from libadalang import AdaNode, Identifier
+from libadalang import AdaNode, Identifier, Expr
 from multimethod import multimethod
 
 from src.utils.pair import Pair
 
-PROPERTY_MAP: str          = "m"
-PROPERTY_STATUS: str       = "s"
+class TreedConstants:
+    PROPERTY_MAP: str          = "m"
+    PROPERTY_STATUS: str       = "s"
 
-GRAM_MAX_LENGTH: int       = 2
-MIN_HEIGHT: int            = 2
-MIN_SIMILARITY: float      = 0.5
-MIN_SIMILARITY_MOVE: float = 0.75
-SIMILARITY_SMOOTH: float   = (3 * MIN_SIMILARITY - 1) / (1 - MIN_SIMILARITY)
+    GRAM_MAX_LENGTH: int       = 2
+    MIN_HEIGHT: int            = 2
+    MIN_SIMILARITY: float      = 0.5
+    MIN_SIMILARITY_MOVE: float = 0.75
+    SIMILARITY_SMOOTH: float   = (3 * MIN_SIMILARITY - 1) / (1 - MIN_SIMILARITY)
 
-STATUS_UNCHANGED: int      = 0
-STATUS_RELABELED: int      = 1
-STATUS_UNMAPPED: int       = 2
-STATUS_MOVED: int          = 3
-
+    STATUS_UNCHANGED: int      = 0
+    STATUS_RELABELED: int      = 1
+    STATUS_UNMAPPED: int       = 2
+    STATUS_MOVED: int          = 3
 
 class TreedBuilder:
     __root: AdaNode
@@ -27,6 +27,8 @@ class TreedBuilder:
     tree: dict[AdaNode, list[AdaNode]] = dict()
     tree_height: dict[AdaNode, int] = dict()
     tree_depth: dict[AdaNode, int] = dict()
+    tree_vector: dict[AdaNode, dict[str, int]] = dict()
+    tree_root_vector: dict[AdaNode, dict[str, int]] = dict()
 
     def __init__(self, root: AdaNode, visit_doc_tags: bool):
         self.__root = root
@@ -122,13 +124,13 @@ class TreedMapper:
     @staticmethod
     def get_status(status: int) -> str:
         match status:
-            case STATUS_MOVED:
+            case TreedConstants.STATUS_MOVED:
                 return "MOVED"
-            case STATUS_RELABELED:
+            case TreedConstants.STATUS_RELABELED:
                 return "RELABELED"
-            case STATUS_UNCHANGED:
+            case TreedConstants.STATUS_UNCHANGED:
                 return "UNCHANGED"
-            case STATUS_UNMAPPED:
+            case TreedConstants.STATUS_UNMAPPED:
                 return "UNMAPPED"
             case _:
                 return "NOTHING_ELSE"
@@ -149,7 +151,7 @@ class TreedMapper:
                     mapped = name_n
                     break
                 mf: int = self.__name_map_frequency[name_m][name_n]
-                if mf > f * MIN_SIMILARITY:
+                if mf > f * TreedConstants.MIN_SIMILARITY:
                     mapped = name_n
             if mapped is not None:
                 self.__rename_map[name_m] = mapped
@@ -168,7 +170,8 @@ class TreedMapper:
                     del self.__rename_map[name_m]
                     break
 
-    def __is_same_name(self, name_m: str, name_n: str) -> bool:
+    @staticmethod
+    def __is_same_name(name_m: str, name_n: str) -> bool:
         index_m: int = name_m.rfind('#')
         index_n: int = name_n.rfind('#')
         if index_m == -1 and index_n == -1:
@@ -178,16 +181,18 @@ class TreedMapper:
         return False
 
     def __mark_unmapped(self, node: AdaNode):
+        # TODO
         ...
 
     @multimethod
     def __mark_changes(self, node: AdaNode):
+        # TODO
         ...
 
     @multimethod
     def __mark_changes(self, nodes: list[AdaNode], mapped_nodes: list[AdaNode]):
         d: list[list[int]] = [[0 for _ in range(len(mapped_nodes) + 1)] for _ in range(2)]
-        p: list[list[str]] = [[None for _ in range(len(mapped_nodes) + 1)] for _ in range(len(nodes) + 1)]
+        p: list[list[Optional[str]]] = [[None for _ in range(len(mapped_nodes) + 1)] for _ in range(len(nodes) + 1)]
         for i in range(1, len(nodes) + 1):
             node: AdaNode = nodes[i - 1]
             maps: dict[AdaNode, float] = self.__tree_map[node]
@@ -339,7 +344,7 @@ class TreedMapper:
 
     def __lcs(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], lcs_m: list[int], lcs_n: list[int]):
         d: list[list[int]] = [[0 for _ in range(len(nodes_n) + 1)] for _ in range(2)]
-        p: list[list[str]] = [[None for _ in range(len(nodes_m) + 1)] for _ in range(len(nodes_n) + 1)]
+        p: list[list[Optional[str]]] = [[None for _ in range(len(nodes_m) + 1)] for _ in range(len(nodes_n) + 1)]
         for i in reversed(range(0, len(nodes_m))):
             node_m: AdaNode = nodes_m[i]
             height_m: int = self.__tree_height.get(node_m)
@@ -376,7 +381,7 @@ class TreedMapper:
     def __get_children_containers(self, node: AdaNode) -> list[AdaNode]:
         children: list[AdaNode] = []
         for child in self.__tree.get(node):
-            if self.__tree_height.get(child) >= MIN_HEIGHT:
+            if self.__tree_height.get(child) >= TreedConstants.MIN_HEIGHT:
                 children.append(child)
         return children
 
@@ -399,8 +404,7 @@ class TreedMapper:
             ancestors_n: list[AdaNode] = []
             self.__get_not_yet_mapped_ancestors(node_m, ancestors_m)
             self.__get_not_yet_mapped_ancestors(node_n, ancestors_n)
-            self.__map(ancestors_m, ancestors_n, MIN_SIMILARITY)
-        
+            self.__map(ancestors_m, ancestors_n, TreedConstants.MIN_SIMILARITY)
 
     def __map(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], threshold: float) -> list[AdaNode]:
         pairs_of_ancestor: dict[AdaNode, set[Pair]] = dict()
@@ -465,12 +469,11 @@ class TreedMapper:
         while pairs:
             pair: Pair = pairs[0]
             similarities[i] = pair.get_weight()
-            for p in pairs_of_node[pair.get_object1()]:
+            for p in pairs_of_node[cast(AdaNode, pair.get_object1())]:
                 pairs.remove(p)
-            for p in pairs_of_node[pair.get_object2()]:
+            for p in pairs_of_node[cast(AdaNode, pair.get_object2())]:
                 pairs.remove(p)
         return similarities
-
 
     @staticmethod
     @multimethod
@@ -479,11 +482,11 @@ class TreedMapper:
         keys: set[str] = set(vector_m.keys()).intersection(set(vector_n.keys()))
         for key in keys:
             similarity += min(vector_m[key], vector_n[key])
-        similarity = 2 * (similarity + SIMILARITY_SMOOTH) / (len(vector_m) + len(vector_n) + 2 * SIMILARITY_SMOOTH)
+        similarity = 2 * (similarity + TreedConstants.SIMILARITY_SMOOTH) / (len(vector_m) + len(vector_n) + 2 * TreedConstants.SIMILARITY_SMOOTH)
         return similarity
 
     @staticmethod
-    def __length(self, vector: dict[T, int]) -> int:
+    def __length(self, vector: dict[object, int]) -> int:
         length: int = 0
         for value in vector.values():
             length += value
@@ -504,7 +507,7 @@ class TreedMapper:
         #  TODO
         ...
 
-    def __max_height(self, nodes: list[AdaNode], maxima: list[AdaNode]):
+    def __max_height(self, nodes: list[AdaNode], maxima: list[AdaNode]) -> int:
         maximum: int = 0
         for node in nodes:
             h: int = self.__tree_height[node]
@@ -531,6 +534,7 @@ class TreedMapper:
 
     @multimethod
     def __map_moving(self):
+        # TODO
         ...
 
     @multimethod
@@ -545,7 +549,7 @@ class TreedMapper:
 
     @multimethod
     def __map_moving(self, list_m: list[AdaNode], list_n: list[AdaNode], heights_m: list[AdaNode], heights_n: list[AdaNode]):
-        mapped_nodes: list[AdaNode] = self.__map(list_m, list_n, MIN_SIMILARITY_MOVE)
+        mapped_nodes: list[AdaNode] = self.__map(list_m, list_n, TreedConstants.MIN_SIMILARITY_MOVE)
         for i in range(0, len(mapped_nodes), 2):
             node_m: AdaNode = mapped_nodes[i]
             node_n: AdaNode = mapped_nodes[i + 1]
@@ -569,23 +573,21 @@ class TreedMapper:
     def __get_not_yet_mapped_descendant_containers(self, node: AdaNode) -> list[AdaNode]:
         children: list[AdaNode] = []
         for child in self.__tree[node]:
-            if child not in self.__pivots_m and child not in self.__pivots_n and self.__tree_height[child] >= MIN_HEIGHT:
+            if child not in self.__pivots_m and child not in self.__pivots_n and self.__tree_height[child] >= TreedConstants.MIN_HEIGHT:
                 if len(self.__tree_map[child]) == 0:
                     children.append(child)
                 else:
                     children.extend(self.__get_not_yet_mapped_descendant_containers(child))
         return children                
 
-    @multimethod
-    def __build_tree(self, visit_doc_tags: bool):
+    def __build_trees(self, visit_doc_tags: bool):
         self.__build_tree(self.__ast_m, visit_doc_tags)
         self.__build_tree(self.__ast_n, visit_doc_tags)
-        
-    @multimethod
+
     def __build_tree(self, root: AdaNode, visit_doc_tags: bool):
         visitor: TreedBuilder = TreedBuilder(root, visit_doc_tags)
         # root.accept(visitor) TODO
-        self.tree.update(visitor.tree)
+        self.__tree.update(visitor.tree)
         self.__tree_height.update(visitor.tree_height)
         self.__tree_depth.update(visitor.tree_depth)
         self.__tree_vector.update(visitor.tree_vector)
@@ -594,8 +596,9 @@ class TreedUtils:
 
     @staticmethod
     def build_label_for_vector(node: AdaNode) -> chr:
-        ...
+        label: str = 
     
     @staticmethod
     def build_ast_label(node: AdaNode) -> str:
-        ...
+        label: str = node.kind_name
+        if isinstance(node, Expr):
