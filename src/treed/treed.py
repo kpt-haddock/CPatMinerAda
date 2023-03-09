@@ -250,6 +250,35 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    def __map_pivots(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], heights_m: list[AdaNode], heights_n: list[AdaNode]):
+        lcs_m: list[int] = []
+        lcs_n: list[int] = []
+        self.__lcs(nodes_m, nodes_n, lcs_m, lcs_n)
+        for i in reversed(range(0, len(lcs_m))):
+            index_m: int = lcs_m[i]
+            index_n: int = lcs_n[i]
+            node_m: AdaNode = nodes_m[index_m]
+            node_n: AdaNode = nodes_n[index_n]
+            self.__set_map(node_m, node_n, 1.0)
+            self.__pivots_m.add(node_m)
+            self.__pivots_n.add(node_n)
+            del nodes_m[index_m]
+            del nodes_n[index_n]
+            heights_m.remove(node_m)
+            heights_n.remove(node_n)
+        while nodes_m and nodes_n:
+            height_m: int = self.__tree_height.get(heights_m[0])
+            height_n: int = self.__tree_height.get(heights_n[0])
+            expanded_m: bool = False
+            expanded_n: bool = False
+            if height_m >= height_n:
+                expanded_m = self.__expand_for_pivots(nodes_m, heights_m, height_m)
+            if height_n >= height_m:
+                expanded_n = self.__expand_for_pivots(nodes_n, heights_n, height_n)
+            if expanded_m or expanded_n:
+                self.__map_pivots(nodes_m, nodes_n, heights_m, heights_n)
+                break
+
     def __expand_for_pivots(self, node_list: list[AdaNode], heights: list[AdaNode], h: int) -> bool:
         nodes: set[AdaNode] = set()
         for node in heights:
