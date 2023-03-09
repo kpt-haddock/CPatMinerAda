@@ -1,3 +1,4 @@
+from bisect import insort
 from typing import Optional, T, cast
 
 from libadalang import AdaNode, Identifier
@@ -258,6 +259,28 @@ class TreedMapper:
             return d
         # TODO original code uses start position and not line no.
         return node1.sloc_range.start.line - node2.sloc_range.start.line
+
+    def __expand_for_moving(self, node_list: list[AdaNode], heights: list[AdaNode], h: int) -> bool:
+        nodes: set[AdaNode] = set()
+        for node in heights:
+            if self.__tree_height.get(node) == h:
+                nodes.add(node)
+            else:
+                break
+        expanded: bool = False
+        for i in reversed(range(0, len(node_list))):
+            node: AdaNode = node_list.get(i)
+            if node in nodes:
+                del node_list[i]
+                del heights[0]
+                children: list[AdaNode] = self.__get_not_yet_mapped_descendant_containers(node)
+                if children:
+                    expanded = True
+                    for j in range(0, len(children)):
+                        child: AdaNode = children[j]
+                        node_list.append(child)
+                        insort(heights, child, key=lambda n: self.__tree_height.get(n) * -1)
+        return expanded
 
     def __lcs(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], lcs_m: list[int], lcs_n: list[int]):
         d: list[list[int]] = [[0 for _ in range(len(nodes_n) + 1)] for _ in range(2)]
