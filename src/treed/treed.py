@@ -250,6 +250,20 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
+    @multimethod
+    def __map_pivots(self):
+        for node in self.__tree.keys():
+            self.__tree_map[node] = dict()
+        self.__set_map(self.__ast_m, self.__ast_n, 1.0)
+        nodes_m: list[AdaNode] = self.__get_children_containers(self.__ast_m)
+        nodes_n: list[AdaNode] = self.__get_children_containers(self.__ast_n)
+        heights_m: list[AdaNode] = nodes_m.copy()
+        heights_n: list[AdaNode] = nodes_n.copy()
+        heights_m.sort(key=lambda x: self.__tree_height[x], reverse=True)
+        heights_n.sort(key=lambda x: self.__tree_height[x], reverse=True)
+        self.__map_pivots(nodes_m, nodes_n, heights_m, heights_n)
+
+    @multimethod
     def __map_pivots(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], heights_m: list[AdaNode], heights_n: list[AdaNode]):
         lcs_m: list[int] = []
         lcs_n: list[int] = []
