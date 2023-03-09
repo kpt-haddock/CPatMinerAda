@@ -250,16 +250,6 @@ class TreedMapper:
             return True
         return name_n == self.__rename_map.get(name_m, None)
 
-    def __compare_nodes(self, node1: AdaNode, node2: AdaNode) -> int:
-        d: int = self.__tree_height.get(node2) - self.__tree_height.get(node1)
-        if d != 0:
-            return d
-        d = self.__tree_depth.get(node1) - self.__tree_depth.get(node2)
-        if d != 0:
-            return d
-        # TODO original code uses start position and not line no.
-        return node1.sloc_range.start.line - node2.sloc_range.start.line
-
     def __expand_for_moving(self, node_list: list[AdaNode], heights: list[AdaNode], h: int) -> bool:
         nodes: set[AdaNode] = set()
         for node in heights:
@@ -324,6 +314,16 @@ class TreedMapper:
             if self.__tree_height.get(child) >= MIN_HEIGHT:
                 children.append(child)
         return children
+
+    def __compare_nodes(self, node1: AdaNode, node2: AdaNode) -> int:
+        d: int = self.__tree_height.get(node2) - self.__tree_height.get(node1)
+        if d != 0:
+            return d
+        d = self.__tree_depth.get(node1) - self.__tree_depth.get(node2)
+        if d != 0:
+            return d
+        # TODO original code uses start position and not line no.
+        return node1.sloc_range.start.line - node2.sloc_range.start.line
 
     def __map_bottom_up(self):
         heights_m: list[AdaNode] = list(self.__pivots_m)
