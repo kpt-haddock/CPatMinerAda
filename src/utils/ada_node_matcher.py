@@ -14,6 +14,19 @@ def match(node1: Optional[AdaNode], node2: Optional[AdaNode]) -> bool:
     return match_specific(node1, node2)
 
 
+# 1: AbortAbsent
+# 2: AbortPresent
+# 3: AbstractAbsent
+# 4: AbstractPresent
+
+#  5 .. 33: Lists
+
+# 34: AliasedAbsent
+# 35: AliasedPresent
+# 36: AllAbsent
+# 37: AllPresent
+
+
 #  38: ConstrainedArrayIndices
 @multimethod
 def match_specific(node1: ConstrainedArrayIndices, node2: ConstrainedArrayIndices) -> bool:
@@ -564,15 +577,6 @@ def match_specific(node1: ProtectedBody, node2: ProtectedBody) -> bool:
            and match(node1.f_end_name, node2.f_end_name)
 
 
-# 114: ExceptionHandler
-@multimethod
-def match_specific(node1: ExceptionHandler, node2: ExceptionHandler) -> bool:
-    return match(node1.f_aspects, node2.f_aspects) \
-           and match(node1.f_exception_name, node2.f_exception_name) \
-           and match(node1.f_handled_exceptions, node2.f_handled_exceptions) \
-           and match(node1.f_stmts, node2.f_stmts)
-
-
 # 110: TaskBody
 @multimethod
 def match_specific(node1: TaskBody, node2: TaskBody) -> bool:
@@ -603,6 +607,15 @@ def match_specific(node1: ExceptionDecl, node2: ExceptionDecl) -> bool:
     return match(node1.f_aspects, node2.f_aspects) \
            and match(node1.f_ids, node2.f_ids) \
            and match(node1.f_renames, node2.f_renames)
+
+
+# 114: ExceptionHandler
+@multimethod
+def match_specific(node1: ExceptionHandler, node2: ExceptionHandler) -> bool:
+    return match(node1.f_aspects, node2.f_aspects) \
+           and match(node1.f_exception_name, node2.f_exception_name) \
+           and match(node1.f_handled_exceptions, node2.f_handled_exceptions) \
+           and match(node1.f_stmts, node2.f_stmts)
 
 
 # 115: ForLoopVarDecl
@@ -688,9 +701,9 @@ def match_specific(node1: NumberDecl, node2: NumberDecl) -> bool:
            and match(node1.f_expr, node2.f_expr)
 
 
-# 126: ExtendedReturnStmtObjectDecl
+# 125: ObjectDecl
 @multimethod
-def match_specific(node1: ExtendedReturnStmtObjectDecl, node2: ExtendedReturnStmtObjectDecl) -> bool:
+def match_specific(node1: ObjectDecl, node2: ObjectDecl) -> bool:
     return match(node1.f_aspects, node2.f_aspects) \
            and match(node1.f_ids, node2.f_ids) \
            and match(node1.f_has_aliased, node2.f_has_aliased) \
@@ -701,9 +714,9 @@ def match_specific(node1: ExtendedReturnStmtObjectDecl, node2: ExtendedReturnStm
            and match(node1.f_renaming_clause, node2.f_renaming_clause)
 
 
-# 125: ObjectDecl
+# 126: ExtendedReturnStmtObjectDecl
 @multimethod
-def match_specific(node1: ObjectDecl, node2: ObjectDecl) -> bool:
+def match_specific(node1: ExtendedReturnStmtObjectDecl, node2: ExtendedReturnStmtObjectDecl) -> bool:
     return match(node1.f_aspects, node2.f_aspects) \
            and match(node1.f_ids, node2.f_ids) \
            and match(node1.f_has_aliased, node2.f_has_aliased) \
@@ -780,6 +793,10 @@ def match_specific(node1: ComponentDef, node2: ComponentDef) -> bool:
     return match(node1.f_has_aliased, node2.f_has_aliased) \
            and match(node1.f_has_constant, node2.f_has_constant) \
            and match(node1.f_type_expr, node2.f_type_expr)
+
+
+# 135: ConstantAbsent
+# 136: ConstantPresent
 
 
 # 137: CompositeConstraint
@@ -902,6 +919,9 @@ def match_specific(node1: RelationOp, node2: RelationOp) -> bool:
     return match(node1.f_left, node2.f_left) \
            and match(node1.f_op, node2.f_op) \
            and match(node1.f_right, node2.f_right)
+
+
+# 155: BoxExpr
 
 
 # 156: CaseExprAlternative
@@ -1035,6 +1055,33 @@ def match_specific(node1: CharLiteral, node2: CharLiteral) -> bool:
     return True
 
 
+# 175: Identifier
+# 176: OpAbs
+# 177: OpAnd
+# 178: OpAndThen
+# 179: OpConcat
+# 180: OpDiv
+# 181: OpDoubleDot
+# 182: OpEq
+# 183: OpGt
+# 184: OpGte
+# 185: OpIn
+# 186: OpLt
+# 187: OpLte
+# 188: OpMinus
+# 189: OpMod
+# 190: OpMult
+# 191: OpNeq
+# 192: OpNot
+# 193: OpNotIn
+# 194: OpOr
+# 195: OpOrElse
+# 196: OpPlus
+# 197: OpPow
+# 198: OpRem
+# 199: OpXor
+
+
 # 200: StringLiteral
 @multimethod
 def match_specific(node1: StringLiteral, node2: StringLiteral) -> bool:
@@ -1057,6 +1104,10 @@ def match_specific(node1: IntLiteral, node2: IntLiteral) -> bool:
 @multimethod
 def match_specific(node1: RealLiteral, node2: RealLiteral) -> bool:
     return True
+
+
+# 204: SyntheticIdentifier
+# 205: TargetName
 
 
 # 206: UpdateAttributeRef
@@ -1102,11 +1153,23 @@ def match_specific(node1: HandledStmts, node2: HandledStmts) -> bool:
            and match(node1.f_exceptions, node2.f_exceptions)
 
 
+# 212: InterfaceKindLimited
+# 213: InterfaceKindProtected
+# 214: InterfaceKindSynchronized
+# 215: InterfaceKindTask
+# 216: IterTypeIn
+# 217: IterTypeOf
+
+
 # 218: LibraryItem
 @multimethod
 def match_specific(node1: LibraryItem, node2: LibraryItem) -> bool:
     return match(node1.f_has_private, node2.f_has_private) \
            and match(node1.f_item, node2.f_item)
+
+
+# 219: LimitedAbsent
+# 220: LimitedPresent
 
 
 # 221: ForLoopSpec
@@ -1125,10 +1188,25 @@ def match_specific(node1: WhileLoopSpec, node2: WhileLoopSpec) -> bool:
     return match(node1.f_expr, node2.f_expr)
 
 
+# 223: ModeDefault
+# 224: ModeIn
+# 225: ModeInOut
+# 226: ModeOut
+
+
 # 227: MultiAbstractStateDecl
 @multimethod
 def match_specific(node1: MultiAbstractStateDecl, node2: MultiAbstractStateDecl) -> bool:
     return match(node1.f_decls, node2.f_decls)
+
+
+# 228: NotNullAbsent
+# 229: NotNullPresent
+# 230: NullComponentDecl
+# 231: OthersDesignator
+# 232: OverridingNotOverriding
+# 233: OverridingOverriding
+# 234: OverridingUnspecified
 
 
 # 235: Params
@@ -1143,11 +1221,17 @@ def match_specific(node1: ParenAbstractStateDecl, node2: ParenAbstractStateDecl)
     return match(node1.f_decl, node2.f_decl)
 
 
+# 237: PpElseDirective
+
+
 # 238: PpElsifDirective
 @multimethod
 def match_specific(node1: PpElsifDirective, node2: PpElsifDirective) -> bool:
     return match(node1.f_expr, node2.f_expr) \
            and match(node1.f_then_kw, node2.f_then_kw)
+
+
+# 239: PpEndIfDirective
 
 
 # 240: PpIfDirective
@@ -1157,11 +1241,18 @@ def match_specific(node1: PpIfDirective, node2: PpIfDirective) -> bool:
            and match(node1.f_then_kw, node2.f_then_kw)
 
 
+# 241: PpThenKw
+
+
 # 242: PragmaNode
 @multimethod
 def match_specific(node1: PragmaNode, node2: PragmaNode) -> bool:
     return match(node1.f_id, node2.f_id) \
            and match(node1.f_args, node2.f_args)
+
+
+# 243: PrivateAbsent
+# 244: PrivatePresent
 
 
 # 245: ProtectedDef
@@ -1170,6 +1261,12 @@ def match_specific(node1: ProtectedDef, node2: ProtectedDef) -> bool:
     return match(node1.f_public_part, node2.f_public_part) \
            and match(node1.f_private_part, node2.f_private_part) \
            and match(node1.f_end_name, node2.f_end_name)
+
+
+# 246: ProtectedAbsent
+# 247: ProtectedPresent
+# 248: QuantifierAll
+# 249: QuantifierSome
 
 
 # 250: RangeSpec
@@ -1188,6 +1285,10 @@ def match_specific(node1: RenamingClause, node2: RenamingClause) -> bool:
 @multimethod
 def match_specific(node1: SyntheticRenamingClause, node2: SyntheticRenamingClause) -> bool:
     return match(node1.f_renamed_object, node2.f_renamed_object)
+
+
+# 253: ReverseAbsent
+# 254: ReversePresent
 
 
 # 255: SelectWhenPart
@@ -1293,6 +1394,9 @@ def match_specific(node1: SelectStmt, node2: SelectStmt) -> bool:
            and match(node1.f_abort_stmts, node2.f_abort_stmts)
 
 
+# 268: ErrorStmt
+
+
 # 269: AbortStmt
 @multimethod
 def match_specific(node1: AbortStmt, node2: AbortStmt) -> bool:
@@ -1338,6 +1442,9 @@ def match_specific(node1: Label, node2: Label) -> bool:
     return match(node1.f_decl, node2.f_decl)
 
 
+# 276: NullStmt
+
+
 # 277: RaiseStmt
 @multimethod
 def match_specific(node1: RaiseStmt, node2: RaiseStmt) -> bool:
@@ -1358,11 +1465,22 @@ def match_specific(node1: ReturnStmt, node2: ReturnStmt) -> bool:
     return match(node1.f_return_expr, node2.f_return_expr)
 
 
+# 280: TerminateAlternative
+# 281: SubpKindFunction
+# 282: SubpKindProcedure
+
+
 # 283: Subunit
 @multimethod
 def match_specific(node1: Subunit, node2: Subunit) -> bool:
     return match(node1.f_name, node2.f_name) \
            and match(node1.f_body, node2.f_body)
+
+
+# 284: SynchronizedAbsent
+# 285: SynchronizedPresent
+# 286: TaggedAbsent
+# 287: TaggedPresent
 
 
 # 288: TaskDef
@@ -1372,6 +1490,9 @@ def match_specific(node1: TaskDef, node2: TaskDef) -> bool:
            and match(node1.f_public_part, node2.f_public_part) \
            and match(node1.f_private_part, node2.f_private_part) \
            and match(node1.f_end_name, node2.f_end_name)
+
+
+# 289: TypeAttributesRepository
 
 
 # 290: AccessToSubpDef
@@ -1421,6 +1542,9 @@ def match_specific(node1: DerivedTypeDef, node2: DerivedTypeDef) -> bool:
 @multimethod
 def match_specific(node1: EnumTypeDef, node2: EnumTypeDef) -> bool:
     return match(node1.f_enum_literals, node2.f_enum_literals)
+
+
+# 296: FormalDiscreteTypeDef
 
 
 # 297: InterfaceTypeDef
@@ -1487,6 +1611,9 @@ def match_specific(node1: AnonymousType, node2: AnonymousType) -> bool:
     return match(node1.f_type_decl, node2.f_type_decl)
 
 
+# 306: EnumLitSynthTypeExpr
+
+
 # 307: SubtypeIndication
 @multimethod
 def match_specific(node1: SubtypeIndication, node2: SubtypeIndication) -> bool:
@@ -1521,6 +1648,10 @@ def match_specific(node1: SyntheticTypeExpr, node2: SyntheticTypeExpr) -> bool:
 @multimethod
 def match_specific(node1: UnconstrainedArrayIndex, node2: UnconstrainedArrayIndex) -> bool:
     return match(node1.f_subtype_indication, node2.f_subtype_indication)
+
+
+# 312: UntilAbsent
+# 313: UntilPresent
 
 
 # 314: UsePackageClause
@@ -1562,3 +1693,6 @@ def match_specific(node1: WithClause, node2: WithClause) -> bool:
     return match(node1.f_has_limited, node2.f_has_limited) \
            and match(node1.f_has_private, node2.f_has_private) \
            and match(node1.f_packages, node2.f_packages)
+
+# 320: WithPrivateAbsent
+# 321: WithPrivatePresent
