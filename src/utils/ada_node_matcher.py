@@ -1,17 +1,39 @@
 from typing import Optional
 
+import libadalang
 from libadalang import *
 from multimethod import multimethod
 
 
+@multimethod
 def match(node1: Optional[AdaNode], node2: Optional[AdaNode]) -> bool:
     if node1 is None and node2 is None:
         return True
     elif node1 is None or node2 is None:
         return False
     elif node1.kind_name != node2.kind_name:
+        print('kind_name left: {}, kind_name right: {}'.format(node1.kind_name, node2.kind_name))
         return False
+    print(node1.kind_name)
+    print('---')
+    print(node1.text)
+    print('---')
     return match_specific(node1, node2)
+
+
+@multimethod
+def match(nodes1: list[AdaNode], nodes2: list[AdaNode]) -> bool:
+    if len(nodes1) != len(nodes2):
+        return False
+    for i, _ in enumerate(nodes1):
+        if not match(nodes1[i], nodes2[i]):
+            return False
+    return True
+
+
+@multimethod
+def match_specific(node1: AdaNode, node2: AdaNode):
+    raise NotImplementedError('match_specific {} not implemented!'.format(node1.kind_name))
 
 
 # 1: AbortAbsent
@@ -20,11 +42,33 @@ def match(node1: Optional[AdaNode], node2: Optional[AdaNode]) -> bool:
 # 4: AbstractPresent
 
 #  5 .. 33: Lists
+@multimethod
+def match_specific(node1: AdaList, node2: AdaList) -> bool:
+    return match(node1.children, node2.children)
 
-# 34: AliasedAbsent
-# 35: AliasedPresent
-# 36: AllAbsent
-# 37: AllPresent
+
+#  34: AliasedAbsent TODO: check if this is correct
+@multimethod
+def match_specific(node1: AliasedAbsent, node2: AliasedAbsent) -> bool:
+    return True
+
+
+#  35: AliasedPresent TODO: check if this is correct
+@multimethod
+def match_specific(node1: AliasedPresent, node2: AliasedPresent) -> bool:
+    return True
+
+
+#  36: AllAbsent TODO: check if this is correct
+@multimethod
+def match_specific(node1: AllAbsent, node2: AllAbsent) -> bool:
+    return True
+
+
+#  37: AllPresent TODO: check if this is correct
+@multimethod
+def match_specific(node1: AllPresent, node2: AllPresent) -> bool:
+    return True
 
 
 #  38: ConstrainedArrayIndices
@@ -795,8 +839,16 @@ def match_specific(node1: ComponentDef, node2: ComponentDef) -> bool:
            and match(node1.f_type_expr, node2.f_type_expr)
 
 
-# 135: ConstantAbsent
-# 136: ConstantPresent
+# 135: ConstantAbsent TODO: check if this is correct
+@multimethod
+def match_specific(node1: ConstantAbsent, node2: ConstantAbsent) -> bool:
+    return True
+
+
+# 136: ConstantPresent TODO: check if this is correct
+@multimethod
+def match_specific(node1: ConstantPresent, node2: ConstantPresent) -> bool:
+    return True
 
 
 # 137: CompositeConstraint
@@ -1055,7 +1107,11 @@ def match_specific(node1: CharLiteral, node2: CharLiteral) -> bool:
     return True
 
 
-# 175: Identifier
+# 175: Identifier TODO: check if this is correct
+@multimethod
+def match_specific(node1: Identifier, node2: Identifier) -> bool:
+    return True
+
 # 176: OpAbs
 # 177: OpAnd
 # 178: OpAndThen
@@ -1080,6 +1136,9 @@ def match_specific(node1: CharLiteral, node2: CharLiteral) -> bool:
 # 197: OpPow
 # 198: OpRem
 # 199: OpXor
+@multimethod
+def match_specific(node1: Op, node2: Op) -> bool:
+    return node1 == node2
 
 
 # 200: StringLiteral
@@ -1192,6 +1251,9 @@ def match_specific(node1: WhileLoopSpec, node2: WhileLoopSpec) -> bool:
 # 224: ModeIn
 # 225: ModeInOut
 # 226: ModeOut
+@multimethod
+def match_specific(node1: Mode, node2: Mode) -> bool:
+    return True
 
 
 # 227: MultiAbstractStateDecl
@@ -1200,13 +1262,46 @@ def match_specific(node1: MultiAbstractStateDecl, node2: MultiAbstractStateDecl)
     return match(node1.f_decls, node2.f_decls)
 
 
-# 228: NotNullAbsent
-# 229: NotNullPresent
-# 230: NullComponentDecl
-# 231: OthersDesignator
-# 232: OverridingNotOverriding
+# 228: NotNullAbsent TODO: check if this is correct
+@multimethod
+def match_specific(node1: NotNullAbsent, node2: NotNullAbsent) -> bool:
+    return True
+
+
+# 229: NotNullPresent TODO: check if this is correct
+@multimethod
+def match_specific(node1: NotNullPresent, node2: NotNullPresent) -> bool:
+    return True
+
+
+# 230: NullComponentDecl TODO: check if this is correct
+@multimethod
+def match_specific(node1: NullComponentDecl, node2: NullComponentDecl) -> bool:
+    return True
+
+
+# 231: OthersDesignator TODO: check if this is correct
+@multimethod
+def match_specific(node1: OthersDesignator, node2: OthersDesignator) -> bool:
+    return True
+
+
+# 232: OverridingNotOverriding TODO: check if this is correct
+@multimethod
+def match_specific(node1: OverridingNotOverriding, node2: OverridingNotOverriding) -> bool:
+    return True
+
+
 # 233: OverridingOverriding
+@multimethod
+def match_specific(node1: OverridingOverriding, node2: OverridingOverriding) -> bool:
+    return True
+
+
 # 234: OverridingUnspecified
+@multimethod
+def match_specific(node1: OverridingUnspecified, node2: OverridingUnspecified) -> bool:
+    return True
 
 
 # 235: Params
@@ -1251,8 +1346,16 @@ def match_specific(node1: PragmaNode, node2: PragmaNode) -> bool:
            and match(node1.f_args, node2.f_args)
 
 
-# 243: PrivateAbsent
-# 244: PrivatePresent
+# 243: PrivateAbsent TODO: double check, not present in Rejuvenation?
+@multimethod
+def match_specific(node1: PrivateAbsent, node2: PrivateAbsent) -> bool:
+    return True
+
+
+# 244: PrivatePresent TODO: double check, not present in Rejuvenation?
+@multimethod
+def match_specific(node1: PrivatePresent, node2: PrivatePresent) -> bool:
+    return True
 
 
 # 245: ProtectedDef
@@ -1442,7 +1545,10 @@ def match_specific(node1: Label, node2: Label) -> bool:
     return match(node1.f_decl, node2.f_decl)
 
 
-# 276: NullStmt
+# 276: NullStmt TODO: check if this is correct
+@multimethod
+def match_specific(node1: NullStmt, node2: NullStmt) -> bool:
+    return True
 
 
 # 277: RaiseStmt
@@ -1466,8 +1572,16 @@ def match_specific(node1: ReturnStmt, node2: ReturnStmt) -> bool:
 
 
 # 280: TerminateAlternative
-# 281: SubpKindFunction
-# 282: SubpKindProcedure
+# 281: SubpKindFunction TODO: check if this is correct
+@multimethod
+def match_specific(node1: SubpKindFunction, node2: SubpKindFunction) -> bool:
+    return True
+
+
+# 282: SubpKindProcedure TODO: check if this is correct
+@multimethod
+def match_specific(node1: SubpKindProcedure, node2: SubpKindProcedure) -> bool:
+    return True
 
 
 # 283: Subunit
