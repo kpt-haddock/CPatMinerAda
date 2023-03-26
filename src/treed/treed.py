@@ -380,10 +380,10 @@ class TreedMapper:
             c = self.__name_frequency.get(name_m, 0)
             self.__name_frequency[name_m] = c + 1
 
-    def __check_name_map(self, name_m: str, name_n: str):
-        if name_m == name_n:
+    def __check_name_map(self, node_m: AdaNode, node_n: AdaNode):
+        if node_m.text == node_n.text:
             return True
-        return name_n == self.__rename_map.get(name_m, None)
+        return node_m.text == self.__rename_map.get(node_m.text, None)
 
     # not sure why this can not be a multimethod?
     def _map_pivots(self):
