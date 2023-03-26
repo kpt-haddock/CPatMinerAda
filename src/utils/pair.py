@@ -1,5 +1,6 @@
 from __future__ import annotations
 from multimethod import multimethod
+from uuid import uuid1
 
 
 class Pair:
@@ -8,20 +9,12 @@ class Pair:
     __weight: float = -1.0
     __weight1: float = 0.0
 
-    @multimethod
-    def __init__(self, object1: object, object2: object):
+    def __init__(self, object1: object, object2: object, weight: float = -1.0, weight1: float = 0.0):
         self.__object1 = object1
         self.__object2 = object2
-
-    @multimethod
-    def __init__(self, object1: object, object2: object, weight: float):
-        self.__init__(object1, object2)
         self.__weight = weight
-
-    @multimethod
-    def __init__(self, object1: object, object2: object, weight: float, weight1: float):
-        self.__init__(object1, object2, weight)
         self.__weight1 = weight1
+        self.__uuid = uuid1()
 
     def compute_weight(self, other: Pair) -> float:
         return self.__weight
@@ -70,4 +63,8 @@ class Pair:
         self.__weight = weight
 
     def __str__(self) -> str:
+        print(self.__uuid)
         return str(self.__weight)
+
+    def __hash__(self):
+        return hash(repr(self))

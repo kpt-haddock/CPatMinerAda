@@ -5,14 +5,16 @@ from collections import deque
 from enum import Enum
 from typing import Optional, cast
 
+import libadalang
 from git import Commit, DiffIndex
-from libadalang import AdaNode, Expr, ObjectDecl
+from libadalang import AdaNode, Expr, ObjectDecl, AnalysisContext, AnalysisUnit
 from multimethod import multimethod
 from overrides import override
 
 from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext
 from src.repository.git_connector import GitConnector
 from src.utils import Config, string_processor
+from src.utils.file_io import FileIO
 from src.utils.pair import Pair
 
 
@@ -213,6 +215,7 @@ class ChangeAnalyzer:
                   .format(self.__number_of_revisions, commit.name_rev, self.__number_of_revisions))
         revision_analyzer: RevisionAnalyzer = RevisionAnalyzer(self, commit)
         analyzed: bool = revision_analyzer.analyze_git()
+        print('analyzed: {}'.format(analyzed))
         if analyzed:
             change_graphs: dict[str, dict[str, ChangeGraph]] = dict()
             for e in revision_analyzer.get_mapped_methods_m():
@@ -311,12 +314,17 @@ class RevisionAnalyzer:
         return self.__mapped_inits_n
 
     def analyze_git(self) -> bool:
+        print(1)
         if not self.__build_git_modified_files():
+            print(2)
             return False
         if Config.count_change_file_only:
+            print(3)
             return True
         if not self.__map():
+            print(4)
             return False
+        print(5)
         self.__derive_changes()
         if len(self.__mapped_methods_m) > 100:
             return False
@@ -346,6 +354,7 @@ class RevisionAnalyzer:
                     new_content: str
                     try:
                         old_content = diff.a_blob.data_stream.read().decode('ISO-8859-2')
+                        print(old_content)
                     except:
                         print('Error reading file: ' + diff.a_blob.path)
                         continue
@@ -373,10 +382,15 @@ class RevisionAnalyzer:
         return True
 
     def __map_classes(self):
+        print('__map_classes')
+        print(self.__mapped_files_m)
         for file_m in self.__mapped_files_m:
+            print('were doing it')
             file_n: ChangeFile = file_m.get_mapped_file()
+            print('file_n: {}'.format(file_n))
             file_m.compute_similarity(file_n)
             for change_class in file_m.get_classes():
+                print('wowowow')
                 if change_class.get_mapped_class() is not None:
                     self.__mapped_classes_m.add(change_class)
                     self.__mapped_classes_n.add(change_class.get_mapped_class())
@@ -467,7 +481,11 @@ class RevisionAnalyzer:
         #  derive_class_changes()
 
     def __derive_method_changes(self):
-        for change_method_m in self.__mapped_methods_m[:]:
+        mapped_methods_m_copy: set[ChangeMethod] = self.__mapped_methods_m.copy()
+        print('__derive_method_changes')
+        print(self.__mapped_methods_m)
+        for change_method_m in mapped_methods_m_copy:
+            print(7)
             change_method_m.derive_changes()
             if change_method_m.get_change_type() == Type.UNCHANGED:
                 self.__mapped_methods_m.remove(change_method_m)
@@ -582,7 +600,7 @@ class ChangeEntity:
 
 
 class ChangeClass(ChangeEntity):
-
+    threshold_similarity: float = 0.75
     __change_file: ChangeFile
     __modifiers: int
     __annotation: str = ''
@@ -623,6 +641,9 @@ class ChangeClass(ChangeEntity):
     def get_mapped_class(self) -> ChangeClass:
         return self.__mapped_class
 
+    def set_mapped_class(self, mapped_class: ChangeClass):
+        self.__mapped_class = mapped_class
+
     @override
     def get_qualifier_name(self) -> str:
         return self.__change_file.get_path() + '.' + self.__simple_name
@@ -631,9 +652,41 @@ class ChangeClass(ChangeEntity):
         return self.get_qualifier_name
 
     @staticmethod
+    def set_map(class_m: ChangeClass, class_n: ChangeClass):
+        class_m.set_mapped_class(class_n)
+        class_n.set_mapped_class(class_m)
+
+    @staticmethod
     def map(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
             mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
-        raise NotImplementedError('ChangeClass map')
+        pairs_of_methods1: dict[ChangeClass, set[Pair]] = dict()
+        pairs_of_methods2: dict[ChangeClass, set[Pair]] = dict()
+        pairs: list[Pair] = []
+        for change_class_m in classes_m:
+            pairs1: set[Pair] = set()
+            for change_class_n in classes_n:
+                similarity: float = change_class_m.compute_similarity(change_class_n, False)
+                if similarity >= ChangeClass.threshold_similarity:
+                    pair: Pair = Pair(change_class_m, change_class_n, similarity)
+                    pairs1.add(pair)
+                    pairs2: set[pair] = pairs_of_methods2.get(change_class_n, set())
+                    pairs2.add(pair)
+                    pairs_of_methods2[change_class_n] = pairs2
+                    pairs.append(pair)
+            pairs_of_methods1[change_class_m] = pairs1
+        pairs.sort(reverse=True)
+        while pairs:
+            pair: Pair = pairs[0]
+            change_class_m: ChangeClass = cast(ChangeClass, pair.get_object1())
+            change_class_n: ChangeClass = cast(ChangeClass, pair.get_object2())
+            ChangeClass.set_map(change_class_m, change_class_n)
+            mapped_classes_m.add(change_class_m)
+            mapped_classes_n.add(change_class_n)
+            for p in pairs_of_methods1[change_class_m]:
+                pairs.remove(p)
+            for p in pairs_of_methods2[change_class_n]:
+                pairs.remove(p)
+
 
     @staticmethod
     def map_all(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
@@ -648,7 +701,7 @@ class ChangeClass(ChangeEntity):
         for name in intersection_names:
             change_class_m: ChangeClass = class_with_name_m[name]
             change_class_n: ChangeClass = class_with_name_n[name]
-            self.set_map(change_class_m, change_class_n)
+            ChangeClass.set_map(change_class_m, change_class_n)
             mapped_classes_m.add(change_class_m)
             mapped_classes_n.add(change_class_n)
             classes_m.remove(change_class_m)
@@ -658,7 +711,7 @@ class ChangeClass(ChangeEntity):
         if classes_m and classes_n:
             temporary_mapped_classes_m: set[ChangeClass] = set()
             temporary_mapped_classes_n: set[ChangeClass] = set()
-            self.map(classes_m, classes_n, temporary_mapped_classes_m, temporary_mapped_classes_n)
+            ChangeClass.map(classes_m, classes_n, temporary_mapped_classes_m, temporary_mapped_classes_n)
             mapped_classes_m.update(temporary_mapped_classes_m)
             mapped_classes_n.update(temporary_mapped_classes_n)
             classes_m = classes_m - temporary_mapped_classes_m
@@ -794,7 +847,8 @@ class ChangeField(ChangeEntity):
 
         return similarity
 
-    def set_map(self, field_m: ChangeField, field_n: ChangeField):
+    @staticmethod
+    def set_map(field_m: ChangeField, field_n: ChangeField):
         field_m.set_mapped_field(field_n)
         field_n.set_mapped_field(field_m)
 
@@ -823,7 +877,7 @@ class ChangeField(ChangeEntity):
             pair: Pair = pairs[0]
             change_field_m: ChangeField = cast(ChangeField, pair.get_object1())
             change_field_n: ChangeField = cast(ChangeField, pair.get_object2())
-            self.set_map(change_field_m, change_field_n)
+            ChangeField.set_map(change_field_m, change_field_n)
             mapped_fields_m.add(change_field_m)
             mapped_fields_n.add(change_field_n)
             for p in pairs_of_methods1[change_field_m]:
@@ -871,10 +925,18 @@ class ChangeFile(ChangeEntity):
     __simple_name: str
     __mapped_file: ChangeFile
     __compilation_unit = None  # TODO
-    # __classes: set[cc.ChangeClass] = set()
+    __context: AnalysisContext = None
+    __unit: AnalysisUnit = None
+    __classes: set[ChangeClass] = set()
 
     def __init__(self, revision_analyzer: RevisionAnalyzer, path: str, content: str):
-        ...
+        self._start_line = 0
+        self.__revision_analyzer = revision_analyzer
+        self.__path = path
+        self.__simple_name = FileIO.get_simple_file_name(path)
+        self.__context = AnalysisContext()
+        self.__unit = self.__context.get_from_file(path)
+
 
     def get_revision_analyzer(self) -> RevisionAnalyzer:
         return self.__revision_analyzer
@@ -1002,12 +1064,16 @@ class ChangeMethod(ChangeEntity):
     __simple_name: str
     __number_of_parameters: int
     __return_type: str
+    __declaration:
     __mapped_method: Optional[ChangeMethod] = None
     __parameter_types: str
     __types: Optional[set[str]]
     __fields: Optional[set[str]]
     __literals: Optional[set[str]] = set()
     # __local_var_locs: dict[]
+
+    def __init__(self, change_class: ChangeClass, method: ):
+
 
     @override
     def get_name(self) -> str:

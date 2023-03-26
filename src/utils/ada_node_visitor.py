@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from libadalang import AdaNode
+from multimethod import multimethod
 
 
 def accept(node: AdaNode, visitor: AdaNodeVisitor):
@@ -18,7 +19,7 @@ class AdaNodeVisitor:
         pass
 
     def visit(self, node: AdaNode) -> bool:
-        print('Visitor visit: {}'.format(node))
+        # print('Visitor visit: {}'.format(node))
         return True
 
     def post_visit(self, node: AdaNode):

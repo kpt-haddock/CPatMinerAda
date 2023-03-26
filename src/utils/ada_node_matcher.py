@@ -12,12 +12,8 @@ def match(node1: Optional[AdaNode], node2: Optional[AdaNode]) -> bool:
     elif node1 is None or node2 is None:
         return False
     elif node1.kind_name != node2.kind_name:
-        print('kind_name left: {}, kind_name right: {}'.format(node1.kind_name, node2.kind_name))
+        # print('kind_name left: {}, kind_name right: {}'.format(node1.kind_name, node2.kind_name))
         return False
-    print(node1.kind_name)
-    print('---')
-    print(node1.text)
-    print('---')
     return match_specific(node1, node2)
 
 

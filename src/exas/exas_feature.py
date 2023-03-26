@@ -88,6 +88,7 @@ class ExasFeature(Feature):
                 return c
         return 0
 
+
 class ExasSequentialFeature(ExasFeature):
     __sequence: list[ExasSingleFeature] = []
 
