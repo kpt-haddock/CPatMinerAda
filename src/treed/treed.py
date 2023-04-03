@@ -7,13 +7,14 @@ from typing import Optional, cast
 from warnings import warn
 
 from libadalang import AdaNode, Identifier, Expr, _kind_to_astnode_cls, BinOp, SubpBody, Stmt, BlockStmt, ReturnStmt, \
-    ExitStmt
+    ExitStmt, ForLoopStmt, WhileLoopStmt, ObjectDecl, DefiningNameList, DefiningName
 from multimethod import multimethod
 from overrides import overrides
 
 from src.utils.ada_node_matcher import match
 from src.utils.ada_node_visitor import AdaNodeVisitor, accept
 from src.utils.pair import Pair
+from src.utils.string_processor import compute_char_lcs, serialize_to_chars
 
 
 class TreedConstants:
@@ -174,6 +175,9 @@ class TreedMapper:
     def get_number_of_unmaps(self) -> int:
         return self.__number_of_unmaps
 
+    def get_number_of_non_name_unmaps(self) -> int:
+        return self.__number_of_non_name_unmaps
+
     def is_changed(self) -> bool:
         return self.__number_of_changes > 0
 
@@ -254,6 +258,7 @@ class TreedMapper:
 
     @staticmethod
     def __is_same_name(name_m: str, name_n: str) -> bool:
+        # TODO this doesn't make sense for Ada.
         index_m: int = name_m.rfind('#')
         index_n: int = name_n.rfind('#')
         if index_m == -1 and index_n == -1:
@@ -521,9 +526,10 @@ class TreedMapper:
         d = self.__tree_depth.get(node1) - self.__tree_depth.get(node2)
         if d != 0:
             return d
-        # TODO original code uses start position and not line no.
-        warn('original code uses start position and not line no.')
-        return node1.sloc_range.start.line - node2.sloc_range.start.line
+        if node1.sloc_range.start.line == node2.sloc_range.start.line:
+            return node1.sloc_range.start.column - node2.sloc_range.start.column
+        else:
+            return node1.sloc_range.start.line - node2.sloc_range.start.line
 
     def __map_bottom_up(self):
         heights_m: list[AdaNode] = list(self.__pivots_m)
@@ -536,6 +542,15 @@ class TreedMapper:
             self.__get_not_yet_mapped_ancestors(node_n, ancestors_n)
             self.__map(ancestors_m, ancestors_n, TreedConstants.MIN_SIMILARITY)
 
+    @staticmethod
+    def __start_position(node: AdaNode) -> int:
+        lines: list[str] = node.unit.root.text.split('\r\n')
+        start_position: int = 0
+        for i in range(0, node.sloc_range.start.line - 1):
+            start_position += len(lines[i])
+        start_position += node.sloc_range.start.column
+        return start_position
+
     def __map(self, nodes_m: list[AdaNode], nodes_n: list[AdaNode], threshold: float) -> list[AdaNode]:
         pairs_of_ancestor: dict[AdaNode, set[Pair]] = dict()
         pairs: list[Pair] = []
@@ -544,10 +559,9 @@ class TreedMapper:
             for node_n in nodes_n:
                 similarity: float = self._compute_similarity(node_m, node_n, threshold)
                 if similarity >= threshold:
-                    # The original example uses start position and not line number TODO
                     pair: Pair = Pair(node_m, node_n, similarity,
-                                      - abs((node_m.parent.sloc_range.start.line - node_m.sloc_range.start.line) -
-                                            (node_n.parent.sloc_range.start.line - node_n.sloc_range.start.line)))
+                                      - abs((self.__start_position(node_m.parent) - self.__start_position(node_m)) -
+                                            (self.__start_position(node_n.parent) - self.__start_position(node_n))))
                     pairs1.add(pair)
                     pairs2: set[Pair] = pairs_of_ancestor.get(node_n, set())
                     pairs2.add(pair)
@@ -582,7 +596,26 @@ class TreedMapper:
         children_n: list[AdaNode] = self.__tree[node_n]
         if not children_m and not children_n:
             # TODO: Modifier?
-            pass
+            similarity: float = 0.0
+            if node_m.is_a(BinOp):
+                similarity = TreedConstants.MIN_SIMILARITY_MOVE
+            else:
+                text_m: str = node_m.text
+                text_n: str = node_n.text
+                if len(text_m) > 1000 or len(text_n) > 1000:
+                    if len(text_m) == 0 and len(text_n) == 0:
+                        similarity = 1.0
+                    elif len(text_m) == 0 or len(text_n) == 0:
+                        similarity = 0.0
+                    else:
+                        similarity = len(text_n) * 1.0 / len(text_m) if len(text_m) > len(text_n) else len(text_m) * 1.0 / len(text_n)
+                elif len(text_m) == 0 and len(text_n) == 0:
+                    similarity = 1.0
+                else:
+                    similarity = compute_char_lcs(serialize_to_chars(text_m), serialize_to_chars(text_n))
+            similarity = threshold + similarity * (1 - threshold)
+            print('SIMILARITY: {}, NO CHILDREN: {}, {}'.format(similarity, node_m, node_n))
+            return similarity
         if children_m and children_n:
             vector_m: dict[str, int] = self.__tree_vector.get(node_m)
             vector_n: dict[str, int] = self.__tree_vector.get(node_n)
@@ -614,6 +647,8 @@ class TreedMapper:
         while pairs:
             pair: Pair = pairs[0]
             similarities[i] = pair.get_weight()
+            # TODO: missed this i += 1 after LONG debugging session, continue debugging from here...
+            i += 1
             for p in pairs_of_node[cast(AdaNode, pair.get_object1())]:
                 if p in pairs:
                     pairs.remove(p)
@@ -628,7 +663,7 @@ class TreedMapper:
         keys: set[str] = set(vector_m.keys()).intersection(set(vector_n.keys()))
         for key in keys:
             similarity += min(vector_m[key], vector_n[key])
-        similarity = 2 * (similarity + TreedConstants.SIMILARITY_SMOOTH) / (
+        similarity = (2 * (similarity + TreedConstants.SIMILARITY_SMOOTH)) / (
                     len(vector_m) + len(vector_n) + 2 * TreedConstants.SIMILARITY_SMOOTH)
         return similarity
 
@@ -665,7 +700,23 @@ class TreedMapper:
                 mapped_children_m: list[AdaNode] = []
                 mapped_children_n: list[AdaNode] = []
                 if node_m.is_a(Stmt):
-                    print('Stmt: {}'.format(node_m))
+                    # if node_m.is_a(ForLoopStmt):
+                    #     mapped_children_m.append(cast(WhileLoopStmt, node_m).)
+                    #     mapped_children_n.append()
+                    pass
+                elif node_m.is_a(SubpBody):
+                    mapped_children_m.append(cast(SubpBody, node_m).f_subp_spec)
+                    mapped_children_m.append(cast(SubpBody, node_m).f_decls)
+                    mapped_children_m.append(cast(SubpBody, node_m).f_stmts)
+                    mapped_children_n.append(cast(SubpBody, node_n).f_subp_spec)
+                    mapped_children_n.append(cast(SubpBody, node_n).f_decls)
+                    mapped_children_n.append(cast(SubpBody, node_n).f_stmts)
+                elif node_m.is_a(ObjectDecl):
+                    mapped_children_m.append(cast(ObjectDecl, node_m).f_ids)
+                    mapped_children_n.append(cast(ObjectDecl, node_n).f_ids)
+                elif node_m.is_a(DefiningName):
+                    mapped_children_m.append(cast(DefiningName, node_m).f_name)
+                    mapped_children_n.append(cast(DefiningName, node_n).f_name)
                 elif node_m.is_a(Expr):
                     print('Expr: {}'.format(node_m))
                 if mapped_children_m and mapped_children_n:
@@ -684,11 +735,13 @@ class TreedMapper:
                                     if similarity >= TreedConstants.MIN_SIMILARITY:
                                         self.__set_map(child_m, child_n, TreedConstants.MIN_SIMILARITY)
                                         if TreedUtils.build_ast_label(child_m) == TreedUtils.build_ast_label(child_n):
-                                            TreedConstants.PROPERTY_STATUS[child_m] = TreedConstants.STATUS_UNCHANGED
-                                            TreedConstants.PROPERTY_STATUS[child_n] = TreedConstants.STATUS_UNCHANGED
+                                            # TODO: Should this not be PROPERTY_STATUS?
+                                            TreedConstants.PROPERTY_MAP[child_m] = TreedConstants.STATUS_UNCHANGED
+                                            TreedConstants.PROPERTY_MAP[child_n] = TreedConstants.STATUS_UNCHANGED
                                         else:
-                                            TreedConstants.PROPERTY_STATUS[child_m] = TreedConstants.STATUS_RELABELED
-                                            TreedConstants.PROPERTY_STATUS[child_n] = TreedConstants.STATUS_RELABELED
+                                            # TODO: Should this not be PROPERTY_STATUS?
+                                            TreedConstants.PROPERTY_MAP[child_m] = TreedConstants.STATUS_RELABELED
+                                            TreedConstants.PROPERTY_MAP[child_n] = TreedConstants.STATUS_RELABELED
                                 if similarity < TreedConstants.MIN_SIMILARITY:
                                     temp_m: list[AdaNode] = []
                                     temp_n: list[AdaNode] = []
@@ -708,8 +761,10 @@ class TreedMapper:
                                         mapped_node_n: AdaNode = mapped_nodes[j+1]
                                         temp_m.remove(mapped_node_m)
                                         temp_n.remove(mapped_node_n)
-                        nodes_m.remove(child_m)
-                        nodes_n.remove(child_n)
+                        if child_m in nodes_m:
+                            nodes_m.remove(child_m)
+                        if child_n in nodes_n:
+                            nodes_n.remove(child_n)
                 lcs_m: list[int] = []
                 lcs_n: list[int] = []
                 self.__lcs(nodes_m, nodes_n, lcs_m, lcs_n)
@@ -743,7 +798,7 @@ class TreedMapper:
                         nodes_n.remove(node)
                         nodes_n.extend(self.__get_not_yet_matched_nodes(self.__tree.get(node)))
                 mapped_nodes = self.__map(nodes_m, nodes_n, TreedConstants.MIN_SIMILARITY_MOVE)
-                for i in range (0, len(mapped_nodes), 2):
+                for i in range(0, len(mapped_nodes), 2):
                     mapped_node_m: AdaNode = mapped_nodes[i]
                     mapped_node_n: AdaNode = mapped_nodes[i+1]
                     nodes_m.remove(mapped_node_m)
@@ -842,6 +897,14 @@ class TreedUtils:
     @staticmethod
     def build_label_for_vector(node: AdaNode) -> int:
         label: int = list(_kind_to_astnode_cls.keys())[list(_kind_to_astnode_cls.values()).index(node.__class__)]
+        if node.is_a(Expr):
+            print('EXPR: {}'.format(node))
+            # if node.kind_name.endswith('Literal'):
+            #     print(label)
+            #     print('Literal')
+            #     return (label | (hash(node.text) << 7)) & 0xFFFF
+            if node.is_a(Identifier):
+                return (label | (hash(node.text) << 7)) & 0x10ffff
         warn('build_label_for_vector not fully implemented.')
         return label
 
