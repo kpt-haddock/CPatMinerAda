@@ -54,6 +54,39 @@ def do_lcs(term1: list[str], term2: list[str], start1: int, end1: int, start2: i
             lcs_n.append(j)
 
 
+def serialize_to_chars(s: str) -> list[int]:
+    l: list[int] = []
+    for i in range(0, len(s)):
+        l.append(ord(s[i]))
+    return l
+
+
+def compute_char_lcs(term1: list[int], term2: list[int]) -> float:
+    len_m: int = len(term1)
+    len_n: int = len(term2)
+    d: list[list[int]] = [[0 for _ in range(len_n + 1)] for _ in range(len_m + 1)]
+    code_m: list[int] = [0 for _ in range(len_m + 1)]
+    code_n: list[int] = [0 for _ in range(len_n + 1)]
+    p: list[list[str]] = [['' for _ in range(len_n + 1)] for _ in range(len_m + 1)]
+    for i in range(1, len_m + 1):
+        code_m[i] = term1[i - 1]
+    for i in range(1, len_n + 1):
+        code_n[i] = term2[i - 1]
+    for i in range(1, len_m + 1):
+        for j in range(1, len_n + 1):
+            if code_m[i] == code_n[j]:
+                d[i][j] = d[i - 1][j - 1] + 1
+                p[i][j] = 'LU'
+            elif d[i - 1][j] >= d[i][j - 1]:
+                d[i][j] = d[i - 1][j]
+                p[i][j] = 'U'
+            else:
+                d[i][j] = d[i][j - 1]
+                p[i][j] = 'L'
+    matches: int = d[len_m][len_n]
+    return matches * 2.0 / (len_m + len_n)
+
+
 @multimethod
 def do_lcs(term1: list[str], term2: list[str], start_m: int, end_m: int, start_n: int, end_n: int, neighborhood: int,
            min: int, lcs_m: list[int], lcs_n: list[int]):
