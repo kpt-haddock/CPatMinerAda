@@ -705,18 +705,21 @@ class TreedMapper:
                     #     mapped_children_n.append()
                     pass
                 elif node_m.is_a(SubpBody):
-                    mapped_children_m.append(cast(SubpBody, node_m).f_subp_spec)
-                    mapped_children_m.append(cast(SubpBody, node_m).f_decls)
-                    mapped_children_m.append(cast(SubpBody, node_m).f_stmts)
-                    mapped_children_n.append(cast(SubpBody, node_n).f_subp_spec)
-                    mapped_children_n.append(cast(SubpBody, node_n).f_decls)
-                    mapped_children_n.append(cast(SubpBody, node_n).f_stmts)
+                    # mapped_children_m.append(cast(SubpBody, node_m).f_subp_spec)
+                    # mapped_children_m.append(cast(SubpBody, node_m).f_decls)
+                    # mapped_children_m.append(cast(SubpBody, node_m).f_stmts)
+                    # mapped_children_n.append(cast(SubpBody, node_n).f_subp_spec)
+                    # mapped_children_n.append(cast(SubpBody, node_n).f_decls)
+                    # mapped_children_n.append(cast(SubpBody, node_n).f_stmts)
+                    pass
                 elif node_m.is_a(ObjectDecl):
-                    mapped_children_m.append(cast(ObjectDecl, node_m).f_ids)
-                    mapped_children_n.append(cast(ObjectDecl, node_n).f_ids)
+                    # mapped_children_m.append(cast(ObjectDecl, node_m).f_ids)
+                    # mapped_children_n.append(cast(ObjectDecl, node_n).f_ids)
+                    pass
                 elif node_m.is_a(DefiningName):
-                    mapped_children_m.append(cast(DefiningName, node_m).f_name)
-                    mapped_children_n.append(cast(DefiningName, node_n).f_name)
+                    # mapped_children_m.append(cast(DefiningName, node_m).f_name)
+                    # mapped_children_n.append(cast(DefiningName, node_n).f_name)
+                    pass
                 elif node_m.is_a(Expr):
                     print('Expr: {}'.format(node_m))
                 if mapped_children_m and mapped_children_n:
@@ -779,7 +782,7 @@ class TreedMapper:
                 # DELETED CODE? 875 - 883
                 lcs_m.clear()
                 lcs_n.clear()
-                mapped_nodes: list[AdaNode] = self.__map(nodes_m, nodes_n, TreedConstants.MIN_SIMILARITY_MOVE)
+                mapped_nodes: list[AdaNode] = self.__map(nodes_m, nodes_n, TreedConstants.MIN_SIMILARITY)
                 for i in range(0, len(mapped_nodes), 2):
                     mapped_node_m: AdaNode = mapped_nodes[i]
                     mapped_node_n: AdaNode = mapped_nodes[i+1]
