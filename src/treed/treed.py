@@ -388,7 +388,7 @@ class TreedMapper:
     def __check_name_map(self, node_m: AdaNode, node_n: AdaNode):
         if node_m.text == node_n.text:
             return True
-        return node_m.text == self.__rename_map.get(node_m.text, None)
+        return node_n.text == self.__rename_map.get(node_m.text, None)
 
     # not sure why this can not be a multimethod?
     def _map_pivots(self):
