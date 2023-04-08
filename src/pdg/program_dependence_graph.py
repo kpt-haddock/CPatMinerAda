@@ -608,6 +608,33 @@ class PDGGraph:
     def get_exas_vector(self) -> dict[ExasFeature, int]:
         return self.__exas_vector
 
+    @staticmethod
+    def clear(map: dict):
+        for key in map.keys():
+            map[key].clear()
+        map.clear()
+
+    def clear_definition_store(self):
+        self.clear(self.__definition_store)
+
+    def clean_up(self):
+        self.clear_definition_store()
+        for node in self._nodes:
+            i: int = 0
+            while i < len(node.get_in_edges()):
+                edge: PDGEdge = node.get_in_edges()[i]
+                if isinstance(edge, PDGDataEdge) and edge.get_type() == Type.DEPENDENCE:
+                    del node._in_edges[i]
+                else:
+                    i += 1
+            i: int = 0
+            while i < len(node.get_out_edges()):
+                edge = node.get_out_edges()[i]
+                if isinstance(edge, PDGDataEdge) and edge.get_type() == Type.DEPENDENCE:
+                    del node._out_edges[i]
+                else:
+                    i += 1
+
     def is_changed_node(self, node: PDGNode) -> bool:
         return node in self._changed_nodes
 
