@@ -13,7 +13,9 @@ from overrides import override
 
 from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext
 from src.repository.git_connector import GitConnector
+from src.treed.treed import TreedMapper
 from src.utils import Config, string_processor
+from src.utils.ada_node_matcher import match
 from src.utils.file_io import FileIO
 from src.utils.pair import Pair
 
@@ -1064,7 +1066,7 @@ class ChangeMethod(ChangeEntity):
     __simple_name: str
     __number_of_parameters: int
     __return_type: str
-    __declaration:
+    __declaration: libadalang.SubpBody
     __mapped_method: Optional[ChangeMethod] = None
     __parameter_types: str
     __types: Optional[set[str]]
@@ -1072,7 +1074,8 @@ class ChangeMethod(ChangeEntity):
     __literals: Optional[set[str]] = set()
     # __local_var_locs: dict[]
 
-    def __init__(self, change_class: ChangeClass, method: ):
+    def __init__(self, change_class: ChangeClass, method: None):
+        pass
 
 
     @override
@@ -1157,6 +1160,16 @@ class ChangeMethod(ChangeEntity):
             temporary_mapped_methods_n: set[ChangeMethod] = set()
             raise NotImplementedError('MAP')
             # self.map
+
+    def derive_changes(self):
+        change_method_n: ChangeMethod = self.__mapped_method
+        if match(self.__declaration, change_method_n.__declaration):
+            return
+        treed_mapper: TreedMapper = TreedMapper(self.__declaration, change_method_n.__declaration)
+        treed_mapper.map(False)
+        if treed_mapper.has_non_name_unmap():
+            self.set_change_type(Type.MODIFIED)
+            change_method_n.set_change_type(Type.MODIFIED)
 
     @override
     def clean_for_stats(self):
