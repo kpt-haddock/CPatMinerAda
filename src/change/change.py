@@ -1138,6 +1138,18 @@ class ChangeMethod(ChangeEntity):
             in_mapped_classes: bool):
         raise NotImplementedError
 
+    @override
+    def _compute_vector_length(self):
+        self._vector_length = 0
+        for key in self._vector.keys():
+            self._vector_length += self._vector.get(key)
+
+    def compute_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
+        raise NotImplementedError
+
+    def compute_name_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
+        raise NotImplementedError
+
     @staticmethod
     def map_all(methods_m: set[ChangeMethod], methods_n: set[ChangeMethod], mapped_methods_m: set[ChangeMethod], mapped_methods_n: set[ChangeMethod], in_mapped_classes: bool) -> list[float]:
         size: tuple[float, float] = (0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0)
