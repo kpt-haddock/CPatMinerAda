@@ -1190,7 +1190,19 @@ class ChangeMethod(ChangeEntity):
             self.__types.clear()
             self.__types = None
 
+    def print_changes(self):
+        # TODO?: printstream
+        if self.get_change_type() != Type.UNCHANGED:
+            mapped_method_string: str = 'None'
+            if self.__mapped_method is not None:
+                mapped_method_string = self.__mapped_method.get_full_name()
+            print('\t\t\tMethod: {} ---> {}'.format(self.get_full_name(), mapped_method_string))
+
+    def __str__(self):
+        return self.get_qualifier_name()
+
     def get_change_graph(self, repository, commit):
+        # TODO
         pdg1: PDGGraph = PDGGraph(self.__declaration, PDGBuildingContext(repository, commit, self.get_change_file().get_path(), False))
         pdg1.build_change_graph(0)
         pdg2: PDGGraph = PDGGraph(self.__mapped_method.__declaration, PDGBuildingContext(repository, commit, self.__mapped_method.get_change_file().get_path(), False))
