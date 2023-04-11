@@ -1119,7 +1119,7 @@ class ChangeMethod(ChangeEntity):
         return self.__change_class.get_simple_name() + '.' + self.__name
 
     @override
-    def get_change_class(self) -> ChangeEntity:
+    def get_change_class(self) -> ChangeClass:
         return self.__change_class
 
     # def get_local_var_locs(self) -> dict[]:
@@ -1131,8 +1131,12 @@ class ChangeMethod(ChangeEntity):
         method_n.set_mapped_method(method_m)
 
     @staticmethod
-    def map(methods_m: set[ChangeMethod], methods_n: set[ChangeMethod]):
-        ...
+    def map(methods_m: set[ChangeMethod],
+            methods_n: set[ChangeMethod],
+            mapped_methods_m: set[ChangeMethod],
+            mapped_methods_n: set[ChangeMethod],
+            in_mapped_classes: bool):
+        raise NotImplementedError
 
     @staticmethod
     def map_all(methods_m: set[ChangeMethod], methods_n: set[ChangeMethod], mapped_methods_m: set[ChangeMethod], mapped_methods_n: set[ChangeMethod], in_mapped_classes: bool) -> list[float]:
@@ -1158,8 +1162,68 @@ class ChangeMethod(ChangeEntity):
         for name in intersection_names:
             temporary_mapped_methods_m: set[ChangeMethod] = set()
             temporary_mapped_methods_n: set[ChangeMethod] = set()
-            raise NotImplementedError('MAP')
-            # self.map
+            ChangeMethod.map(methods_with_name_m.get(name),
+                             methods_with_name_n.get(name),
+                             temporary_mapped_methods_m,
+                             temporary_mapped_methods_n,
+                             in_mapped_classes)
+            mapped_methods_m.update(temporary_mapped_methods_m)
+            mapped_methods_n.update(temporary_mapped_methods_n)
+            methods_m -= temporary_mapped_methods_m
+            methods_n -= temporary_mapped_methods_n
+            size[0] += len(temporary_mapped_methods_m)
+
+        # map methods with same simple names
+        methods_with_name_m.clear()
+        methods_with_name_n.clear()
+        for change_method in methods_m:
+            name: str = change_method.get_simple_name()
+            if name == change_method.get_change_class().get_simple_name():
+                name = 'class'
+            change_method_set: set[ChangeMethod] = methods_with_name_m.get(name, None)
+            if change_method_set is None:
+                change_method_set = set()
+            change_method_set.add(change_method)
+            methods_with_name_m[name] = change_method_set
+        for change_method in methods_n:
+            name: str = change_method.get_simple_name()
+            if name == change_method.get_change_class().get_simple_name():
+                name = 'class'
+            change_method_set: set[ChangeMethod] = methods_with_name_n.get(name, None)
+            if change_method_set is None:
+                change_method_set = set()
+            change_method_set.add(change_method)
+            methods_with_name_n[name] = change_method_set
+        intersection_names = set(methods_with_name_m.keys()).intersection(set(methods_with_name_n.keys()))
+        for name in intersection_names:
+            temporary_mapped_methods_m: set[ChangeMethod] = set()
+            temporary_mapped_methods_n: set[ChangeMethod] = set()
+            ChangeMethod.map(methods_with_name_m.get(name),
+                             methods_with_name_n.get(name),
+                             temporary_mapped_methods_m,
+                             temporary_mapped_methods_n,
+                             in_mapped_classes)
+            mapped_methods_m.update(temporary_mapped_methods_m)
+            mapped_methods_n.update(temporary_mapped_methods_n)
+            methods_m -= temporary_mapped_methods_m
+            methods_n -= temporary_mapped_methods_n
+            size[0] += len(temporary_mapped_methods_m)
+        # map other methods
+        temporary_mapped_methods_m: set[ChangeMethod] = set()
+        temporary_mapped_methods_n: set[ChangeMethod] = set()
+        ChangeMethod.map(methods_m,
+                         methods_n,
+                         temporary_mapped_methods_m,
+                         temporary_mapped_methods_n,
+                         in_mapped_classes)
+        mapped_methods_m.update(temporary_mapped_methods_m)
+        mapped_methods_n.update(temporary_mapped_methods_n)
+        methods_m -= temporary_mapped_methods_m
+        methods_n -= temporary_mapped_methods_n
+        size[0] += len(temporary_mapped_methods_m)
+
+        return size
+
 
     def derive_changes(self):
         change_method_n: ChangeMethod = self.__mapped_method
