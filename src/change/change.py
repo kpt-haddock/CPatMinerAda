@@ -1072,7 +1072,7 @@ class ChangeMethod(ChangeEntity):
     __types: Optional[set[str]]
     __fields: Optional[set[str]]
     __literals: Optional[set[str]] = set()
-    # __local_var_locs: dict[]
+    __local_var_locs: dict[libadalang.Identifier, set[libadalang.Identifier]] = dict()
 
     def __init__(self, change_class: ChangeClass, method: None):
         pass
@@ -1101,10 +1101,6 @@ class ChangeMethod(ChangeEntity):
         return self.__simple_name + self.__parameter_types
 
     @override
-    def get_change_file(self) -> ChangeFile:
-        return self.__change_class.get_change_file()
-
-    @override
     def get_mapped_entity(self) -> Optional[ChangeMethod]:
         return self.get_mapped_method()
 
@@ -1119,11 +1115,15 @@ class ChangeMethod(ChangeEntity):
         return self.__change_class.get_simple_name() + '.' + self.__name
 
     @override
+    def get_change_file(self) -> ChangeFile:
+        return self.__change_class.get_change_file()
+
+    @override
     def get_change_class(self) -> ChangeClass:
         return self.__change_class
 
-    # def get_local_var_locs(self) -> dict[]:
-    #     return self.__local_var_locs
+    def get_local_var_locs(self) -> dict[libadalang.Identifier, set[libadalang.Identifier]]:
+        return self.__local_var_locs
 
     @staticmethod
     def set_map(method_m: ChangeMethod, method_n: ChangeMethod):
@@ -1136,7 +1136,37 @@ class ChangeMethod(ChangeEntity):
             mapped_methods_m: set[ChangeMethod],
             mapped_methods_n: set[ChangeMethod],
             in_mapped_classes: bool):
-        raise NotImplementedError
+        pairs_of_methods1: dict[ChangeMethod, set[Pair]] = dict()
+        pairs_of_methods2: dict[ChangeMethod, set[Pair]] = dict()
+        pairs: list[Pair] = []
+        for change_method_m in methods_m:
+            pairs1: set[Pair] = set()
+            for change_method_n in methods_n:
+                similarity: list[float] = change_method_m.compute_similarity(change_method_n, in_mapped_classes)
+                is_mapped: bool = (in_mapped_classes and similarity[0] >= ChangeMethod.__threshold_signature_similarity)\
+                    or (similarity[0] > 0 and similarity[1] == 1.0) \
+                    or (similarity[0] >= ChangeMethod.__threshold_signature_similarity
+                        and similarity[1] >= ChangeMethod.__threshold_body_similarity)
+                if is_mapped:
+                    pair: Pair = Pair(change_method_m, change_method_n, similarity[3])
+                    pairs1.add(pair)
+                    pairs2: set[Pair] = pairs_of_methods2.get(change_method_n, set())
+                    pairs2.add(pair)
+                    pairs_of_methods2[change_method_n] = pairs2
+                    pairs.append(pair)
+            pairs_of_methods1[change_method_m] = pairs1
+        pairs.sort(reverse=True)
+        while pairs:
+            pair: Pair = pairs[0]
+            change_method_m: ChangeMethod = cast(ChangeMethod, pair.get_object1())
+            change_method_n: ChangeMethod = cast(ChangeMethod, pair.get_object2())
+            ChangeMethod.set_map(change_method_m, change_method_n)
+            mapped_methods_m.add(change_method_m)
+            mapped_methods_n.add(change_method_n)
+            for p in pairs_of_methods1.get(cast(ChangeMethod, pair.get_object1())):
+                pairs.remove(p)
+            for p in pairs_of_methods2.get(cast(ChangeMethod, pair.get_object2())):
+                pairs.remove(p)
 
     @override
     def _compute_vector_length(self):
