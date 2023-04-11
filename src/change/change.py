@@ -1175,7 +1175,18 @@ class ChangeMethod(ChangeEntity):
             self._vector_length += self._vector.get(key)
 
     def compute_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
-        raise NotImplementedError
+        similarity: list[float] = [0.0, 0.0, 0.0, 0.0]
+        signature: float = self.compute_name_similarity(other, in_mapped_classes)
+        body: float = 1.0
+        if len(self._vector) > 0 or len(other._get_vector()) > 0:
+            body = self.compute_vector_similarity(other)
+        similarity[0] = signature
+        similarity[1] = body
+        similarity[2] = signature + body
+        similarity[3] = round(signature * 10.0) + signature + body
+
+        return similarity
+
 
     def compute_name_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
         raise NotImplementedError
