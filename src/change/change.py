@@ -384,15 +384,10 @@ class RevisionAnalyzer:
         return True
 
     def __map_classes(self):
-        print('__map_classes')
-        print(self.__mapped_files_m)
         for file_m in self.__mapped_files_m:
-            print('were doing it')
             file_n: ChangeFile = file_m.get_mapped_file()
-            print('file_n: {}'.format(file_n))
             file_m.compute_similarity(file_n)
             for change_class in file_m.get_classes():
-                print('wowowow')
                 if change_class.get_mapped_class() is not None:
                     self.__mapped_classes_m.add(change_class)
                     self.__mapped_classes_n.add(change_class.get_mapped_class())
@@ -689,7 +684,6 @@ class ChangeClass(ChangeEntity):
             for p in pairs_of_methods2[change_class_n]:
                 pairs.remove(p)
 
-
     @staticmethod
     def map_all(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
                 mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
@@ -718,22 +712,20 @@ class ChangeClass(ChangeEntity):
             mapped_classes_n.update(temporary_mapped_classes_n)
             classes_m = classes_m - temporary_mapped_classes_m
             classes_n = classes_n - temporary_mapped_classes_n
-            
-        
 
     def derive_changes(self):
-        ...
+        raise NotImplementedError
 
     @multimethod
     def print_changes(self, stream):
-        ...
+        raise NotImplementedError
 
     @multimethod
     def print_changes(self, stream, l):
-        ...
+        raise NotImplementedError
 
     def has_changed_name(self) -> bool:
-        ...
+        raise NotImplementedError
 
     def __str__(self) -> str:
         return self.get_name()
@@ -766,6 +758,8 @@ class ChangeField(ChangeEntity):
         self._start_line = object_declaration.sloc_range.start.line
         self.__change_class = change_class
         self._compute_vector_length()
+        # TODO: implement
+        raise NotImplementedError
 
     def get_modifiers(self) -> int:
         return self.__modifiers
@@ -822,8 +816,6 @@ class ChangeField(ChangeEntity):
 
     def compute_similarity(self, other: ChangeField) -> list[float]:
         similarity: list[float] = [0, 0, 0, 0]
-        signature: float = 0
-        body: float = 0
         sequence1: list[str] = string_processor.serialize(text=self.__type)
         sequence2: list[str] = string_processor.serialize(other.__type)
         lcs_m: list[int] = []
@@ -837,11 +829,10 @@ class ChangeField(ChangeEntity):
         lcs_n = []
         string_processor.do_lcs(sequence1, sequence2, 0, 0, lcs_m, lcs_n)
         similarity_name: float = len(lcs_m) * 2.0 / (len(sequence1) + len(sequence2))
-        signature = (similarity_type + 2.0 * similarity_name) / 3.0
+        signature: float = (similarity_type + 2.0 * similarity_name) / 3.0
+        body: float = 1.0
         if len(self._vector) > 0 or len(other._get_vector()) > 0:
             body = self.compute_vector_similarity(other)
-        else:
-            body = 1.0
         similarity[0] = signature
         similarity[1] = body
         similarity[2] = signature + body
@@ -854,7 +845,8 @@ class ChangeField(ChangeEntity):
         field_m.set_mapped_field(field_n)
         field_n.set_mapped_field(field_m)
 
-    def map(self, fields_m: set[ChangeField], fields_n: set[ChangeField], mapped_fields_m: set[ChangeField],
+    @staticmethod
+    def map(fields_m: set[ChangeField], fields_n: set[ChangeField], mapped_fields_m: set[ChangeField],
             mapped_fields_n: set[ChangeField]):
         pairs_of_methods1: dict[ChangeField, set[Pair]] = {}
         pairs_of_methods2: dict[ChangeField, set[Pair]] = {}
@@ -914,7 +906,12 @@ class ChangeField(ChangeEntity):
         return common_size, total_size
 
     def print_changes(self, ps):
-        ...
+        # TODO: print stream
+        if self.get_change_type() != Type.UNCHANGED:
+            mapped_field_name: str = 'None'
+            if self.__mapped_field is not None:
+                mapped_field_name = self.__mapped_field.get_name()
+            print('\t\t\tField: {} ---> {}'.format(self.get_name(), mapped_field_name))
 
     def __str__(self):
         return self.get_qualifier_name()
@@ -938,7 +935,6 @@ class ChangeFile(ChangeEntity):
         self.__simple_name = FileIO.get_simple_file_name(path)
         self.__context = AnalysisContext()
         self.__unit = self.__context.get_from_file(path)
-
 
     def get_revision_analyzer(self) -> RevisionAnalyzer:
         return self.__revision_analyzer
@@ -986,7 +982,7 @@ class ChangeFile(ChangeEntity):
                 class_n = change_class
         if class_m is not None and class_n is not None:
             similarity: float = class_m.compute_similarity(class_n, False)
-            if similarity > ChangeClass.threshold_similary:
+            if similarity > ChangeClass.threshold_similarity:
                 ChangeClass.set_map(class_m, class_n)
                 mapped_classes_m.add(class_m)
                 mapped_classes_n.add(class_n)
@@ -994,11 +990,13 @@ class ChangeFile(ChangeEntity):
                 classes_n.remove(class_n)
         ChangeClass.map_all(classes_m, classes_n, mapped_classes_m, mapped_classes_n)
 
+    @multimethod
     def print_changes(self, ps):
-        ...
+        raise NotImplementedError
 
+    @multimethod
     def print_changes(self, ps, classes):
-        ...
+        raise NotImplementedError
 
     @override
     def __str__(self) -> str:
@@ -1077,7 +1075,6 @@ class ChangeMethod(ChangeEntity):
     def __init__(self, change_class: ChangeClass, method: None):
         pass
 
-
     @override
     def get_name(self) -> str:
         return self.__name
@@ -1143,7 +1140,8 @@ class ChangeMethod(ChangeEntity):
             pairs1: set[Pair] = set()
             for change_method_n in methods_n:
                 similarity: list[float] = change_method_m.compute_similarity(change_method_n, in_mapped_classes)
-                is_mapped: bool = (in_mapped_classes and similarity[0] >= ChangeMethod.__threshold_signature_similarity)\
+                is_mapped: bool = (in_mapped_classes
+                                   and similarity[0] >= ChangeMethod.__threshold_signature_similarity)\
                     or (similarity[0] > 0 and similarity[1] == 1.0) \
                     or (similarity[0] >= ChangeMethod.__threshold_signature_similarity
                         and similarity[1] >= ChangeMethod.__threshold_body_similarity)
@@ -1187,13 +1185,22 @@ class ChangeMethod(ChangeEntity):
 
         return similarity
 
-
     def compute_name_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
+        signature: float = 0.0
+        full_name1: str = self.get_full_name()
+        full_name2: str = other.get_full_name()
+
         raise NotImplementedError
+        return signature
 
     @staticmethod
-    def map_all(methods_m: set[ChangeMethod], methods_n: set[ChangeMethod], mapped_methods_m: set[ChangeMethod], mapped_methods_n: set[ChangeMethod], in_mapped_classes: bool) -> list[float]:
-        size: tuple[float, float] = (0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0)
+    def map_all(methods_m: set[ChangeMethod],
+                methods_n: set[ChangeMethod],
+                mapped_methods_m: set[ChangeMethod],
+                mapped_methods_n: set[ChangeMethod],
+                in_mapped_classes: bool) -> tuple[float, float]:
+        size: tuple[float, float] =\
+            (0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0)
         #  map methods with same simple names and numbers of parameters
         methods_with_name_m: dict[str, set[ChangeMethod]] = {}
         methods_with_name_n: dict[str, set[ChangeMethod]] = {}
@@ -1277,7 +1284,6 @@ class ChangeMethod(ChangeEntity):
 
         return size
 
-
     def derive_changes(self):
         change_method_n: ChangeMethod = self.__mapped_method
         if match(self.__declaration, change_method_n.__declaration):
@@ -1357,6 +1363,7 @@ class ChangeProject:
         self.__id = id
         self.__name = name
         prefix: str = '{}/{}-'.format(path, name)
+        # TODO
         # self.index_tokens
         # self.token_indexes
 
@@ -1398,7 +1405,6 @@ class ChangeProject:
 
     @staticmethod
     def read_fixing_revisions(file_path: str):
-        fixing_revisions: dict[str, list[int]] = dict()
         raise NotImplementedError('this method is not used in CPatMiner')
 
 
