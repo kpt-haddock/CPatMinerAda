@@ -246,7 +246,7 @@ class PDGEdge:
 
     @abc.abstractmethod
     def get_label(self) -> str:
-        ...
+        pass
 
     def get_source(self) -> PDGNode:
         return self._source
@@ -256,7 +256,7 @@ class PDGEdge:
 
     @abc.abstractmethod
     def get_exas_label(self) -> str:
-        ...
+        pass
 
 
 class PDGActionNode(PDGNode):
@@ -371,8 +371,7 @@ class PDGControlNode(PDGNode):
     def is_definition(self) -> bool:
         return False
 
-    # override
-    def to_string(self) -> str:
+    def __str__(self) -> str:
         return self.get_label()
 
     def get_body(self) -> PDGGraph:
@@ -462,8 +461,7 @@ class PDGDataEdge(PDGEdge):
             case _:
                 return '_data_'
 
-    # override
-    def to_string(self) -> str:
+    def __str__(self) -> str:
         return self.get_label()
 
 
@@ -616,6 +614,12 @@ class PDGGraph:
 
     def clear_definition_store(self):
         self.clear(self.__definition_store)
+
+    def copy_definition_store(self) -> dict[str, set[PDGDataNode]]:
+        store: dict[str, set[PDGDataNode]] = dict()
+        for key in self.__definition_store.keys():
+            store[key] = self.__definition_store.get(key).copy()
+        return store
 
     def clean_up(self):
         self.clear_definition_store()
