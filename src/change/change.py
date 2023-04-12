@@ -879,7 +879,8 @@ class ChangeField(ChangeEntity):
             for p in pairs_of_methods2[change_field_n]:
                 pairs.remove(p)
 
-    def map_all(self, fields_m: set[ChangeField], fields_n: set[ChangeField], mapped_fields_m: set[ChangeField],
+    @staticmethod
+    def map_all(fields_m: set[ChangeField], fields_n: set[ChangeField], mapped_fields_m: set[ChangeField],
                 mapped_fields_n: set[ChangeField]) -> tuple[float, float]:
         common_size: int = 0
         total_size: int = 0
@@ -893,16 +894,19 @@ class ChangeField(ChangeEntity):
         for name in intersection_names:
             change_field_m: ChangeField = field_with_name_m[name]
             change_field_n: ChangeField = field_with_name_n[name]
-            self.set_map(change_field_m, change_field_n)
+            ChangeField.set_map(change_field_m, change_field_n)
             mapped_fields_m.add(change_field_m)
             mapped_fields_n.add(change_field_n)
             fields_m.remove(change_field_m)
             fields_n.remove(change_field_n)
             common_size += 1
             total_size += 1
-        self.map(fields_m, fields_n, mapped_fields_m, mapped_fields_n)
+
+        # map other fields
+        ChangeField.map(fields_m, fields_n, mapped_fields_m, mapped_fields_n)
         common_size += len(mapped_fields_m)
         total_size += len(mapped_fields_m)
+
         return common_size, total_size
 
     def print_changes(self, ps):
