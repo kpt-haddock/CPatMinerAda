@@ -4,7 +4,7 @@ import abc
 from enum import Enum
 from typing import Optional, Final, cast
 
-from libadalang import AdaNode, SubpBody
+from libadalang import AdaNode, SubpBody, ReturnStmt
 from multimethod import multimethod
 from overrides import override
 
@@ -761,6 +761,13 @@ class PDGGraph:
             if node.is_definition():
                 definitions.append(cast(PDGDataNode, node))
         return definitions
+
+    def get_returns(self) -> list[PDGActionNode]:
+        nodes: list[PDGActionNode] = []
+        for node in self._statement_sinks:
+            if node.get_ast_node_type() == ReturnStmt:
+                nodes.append(cast(PDGActionNode, node))
+        return nodes
 
     def clean_up(self):
         self.clear_definition_store()
