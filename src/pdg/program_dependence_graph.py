@@ -606,7 +606,20 @@ class PDGGraph:
     def get_exas_vector(self) -> dict[ExasFeature, int]:
         return self.__exas_vector
 
+    @multimethod
+    def clear(self):
+        self._nodes.clear()
+        self._statement_nodes.clear()
+        self._data_sources.clear()
+        self._statement_sources.clear()
+        self._sinks.clear()
+        self._statement_sinks.clear()
+        self._breaks.clear()
+        self._returns.clear()
+        self.clear_definition_store()
+
     @staticmethod
+    @multimethod
     def clear(map: dict):
         for key in map.keys():
             map[key].clear()
@@ -651,6 +664,7 @@ class PDGGraph:
                 c += definition_counts.get(key)
             definition_counts[key] = c
 
+    @multimethod
     def merge_sequential_control(self, next: PDGNode, label: str):
         self._sinks.clear()
         self._sinks.add(next)
@@ -698,6 +712,21 @@ class PDGGraph:
         self._sinks.remove(ret)
         self._sinks.add(node)
         PDGDataEdge(ret, node, type)
+
+    @multimethod
+    def merge_sequential_control(self, pdg: PDGGraph):
+        if not pdg._statement_nodes:
+            return
+        if not self._statement_nodes or not pdg._statement_nodes:
+            raise SystemError('Merging an empty graph?!')
+        self._sinks.clear()
+        self._statement_sinks.clear()
+        self._statement_sinks.update(pdg._statement_sinks)
+        self._nodes.update(pdg._nodes)
+        self._statement_nodes.update(pdg._statement_nodes)
+        self._breaks.update(pdg._breaks)
+        self._returns.update(pdg._returns)
+        pdg.clear()
 
     def clean_up(self):
         self.clear_definition_store()
