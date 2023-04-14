@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from enum import Enum
-from typing import Optional, Final
+from typing import Optional, Final, cast
 
 from libadalang import AdaNode
 from multimethod import multimethod
@@ -661,6 +661,34 @@ class PDGGraph:
         self._nodes.add(next)
         self._statement_nodes.add(next)
 
+    def merge_sequential_data(self, next: PDGNode, type: Type):
+        if next.is_statement():
+            for sink in self._statement_sinks:
+                PDGDataEdge(sink, next, Type.DEPENDENCE)
+        if type == Type.DEFINITION:
+            s: set[PDGDataNode] = set()
+            s.add(cast(PDGDataNode, next))
+            self.__definition_store[next._key] = s
+        elif type == Type.QUALIFIER:
+            self._data_sources.add(cast(PDGDataNode, next))
+        elif type != Type.REFERENCE and isinstance(next, PDGDataNode):
+            s: set[PDGDataNode] = self.__definition_store.get(next._key, None)
+            if s is not None:
+                for definition in s:
+                    PDGDataEdge(definition, next, Type.REFERENCE)
+        for node in self._sinks:
+            PDGDataEdge(node, next, type)
+        self._sinks.clear()
+        self._sinks.add(next)
+        if not self._nodes and isinstance(next, PDGDataNode):
+            self._data_sources.add(cast(PDGDataNode, next))
+        self._nodes.add(next)
+        if next.is_statement():
+            self._statement_nodes.add(next)
+            if not self._statement_sources:
+                self._statement_sources.add(next)
+            self._statement_sinks.clear()
+            self._statement_sinks.add(next)
 
     def clean_up(self):
         self.clear_definition_store()
