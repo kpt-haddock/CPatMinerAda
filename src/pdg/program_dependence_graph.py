@@ -4,7 +4,7 @@ import abc
 from enum import Enum
 from typing import Optional, Final, cast
 
-from libadalang import AdaNode
+from libadalang import AdaNode, SubpBody
 from multimethod import multimethod
 from overrides import override
 
@@ -538,7 +538,7 @@ class PDGDataNode(PDGNode):
 class PDGEntryNode(PDGNode):
     __label: str
 
-    def __init__(self, ast_node, node_type, label: str, ast_node_type: int):
+    def __init__(self, ast_node: AdaNode, ast_node_type: int, label: str):
         super().__init__(ast_node, ast_node_type)
         self.__label = label
 
@@ -734,6 +734,18 @@ class PDGGraph:
                 self._sinks.add(node)
                 self._statement_sinks.add(node)
                 self._breaks.remove(node)
+
+    def adjust_return_nodes(self):
+        self._sinks.update(self._returns)
+        self._statement_sinks.update(self._returns)
+        self._returns.clear()
+        self._end_node = PDGEntryNode(None, SubpBody, 'END')
+        for sink in self._statement_sinks:
+            PDGDataEdge(sink, self._end_node, Type.DEPENDENCE)
+        self._sinks.clear()
+        self._statement_sinks.clear()
+        self._nodes.add(self._end_node)
+        self._statement_nodes.remove(self._entry_node)
 
     def clean_up(self):
         self.clear_definition_store()
