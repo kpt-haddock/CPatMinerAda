@@ -612,6 +612,19 @@ class PDGGraph:
             map[key].clear()
         map.clear()
 
+    @staticmethod
+    def update(target: dict[str, set[object]], source: dict[str, set[object]]):
+        for key in source.keys():
+            s: set[object] = source.get(key)
+            if None in s:
+                if key in target:
+                    s.remove(None)
+                    target.get(key).update(s.copy()) # This copy seems unnecessary
+                else:
+                    target[key] = s.copy()
+            else:
+                target[key] = s.copy()
+
     def clear_definition_store(self):
         self.clear(self.__definition_store)
 
@@ -620,6 +633,9 @@ class PDGGraph:
         for key in self.__definition_store.keys():
             store[key] = self.__definition_store.get(key).copy()
         return store
+
+    def update_definition_store(self, store: dict[str, set[PDGDataNode]]):
+        PDGGraph.update(self.__definition_store, store)
 
     def clean_up(self):
         self.clear_definition_store()
