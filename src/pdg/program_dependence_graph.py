@@ -690,6 +690,15 @@ class PDGGraph:
             self._statement_sinks.clear()
             self._statement_sinks.add(next)
 
+    def extend(self, ret: PDGNode, node: PDGDataNode, type: Type):
+        s: set[PDGDataNode] = set()
+        s.add(node)
+        self.__definition_store[node._key] = s
+        self._nodes.add(node)
+        self._sinks.remove(ret)
+        self._sinks.add(node)
+        PDGDataEdge(ret, node, type)
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
