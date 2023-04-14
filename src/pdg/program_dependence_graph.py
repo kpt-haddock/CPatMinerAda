@@ -747,6 +747,14 @@ class PDGGraph:
         self._nodes.add(self._end_node)
         self._statement_nodes.remove(self._entry_node)
 
+    def adjust_control_edges(self):
+        for node in self._statement_nodes:
+            incoming_empty_nodes: list[PDGNode] = node.get_incoming_empty_nodes()
+            if len(incoming_empty_nodes) == 1 and len(node.get_in_dependences()) == 1:
+                empty_node: PDGNode = incoming_empty_nodes[0]
+                if node._control != empty_node._control:
+                    node._control.adjust_control(node, empty_node)
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
