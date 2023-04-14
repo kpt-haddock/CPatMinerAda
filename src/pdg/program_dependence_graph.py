@@ -651,6 +651,16 @@ class PDGGraph:
                 c += definition_counts.get(key)
             definition_counts[key] = c
 
+    def merge_sequential_control(self, next: PDGNode, label: str):
+        self._sinks.clear()
+        self._sinks.add(next)
+        self._statement_sinks.clear()
+        self._statement_sinks.add(next)
+        if not self._statement_nodes:
+            self._statement_sources.add(next)
+        self._nodes.add(next)
+        self._statement_nodes.add(next)
+
 
     def clean_up(self):
         self.clear_definition_store()
