@@ -728,6 +728,13 @@ class PDGGraph:
         self._returns.update(pdg._returns)
         pdg.clear()
 
+    def adjust_break_nodes(self, id: Optional[str]):
+        for node in self._breaks.copy():
+            if (node._key is None and id is None) or node._key == id:
+                self._sinks.add(node)
+                self._statement_sinks.add(node)
+                self._breaks.remove(node)
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
