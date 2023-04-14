@@ -775,6 +775,13 @@ class PDGGraph:
                 return n
         raise RuntimeError('Error in getting the only output node!!!')
 
+    def get_only_data_out(self):
+        if len(self._sinks) == 1:
+            for n in self._sinks:
+                if isinstance(n, PDGDataNode):
+                    return cast(PDGDataNode, n)
+        raise SystemExit('Error in getting the only data output node!!!')
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
