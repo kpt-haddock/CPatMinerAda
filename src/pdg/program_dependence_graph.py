@@ -755,6 +755,13 @@ class PDGGraph:
                 if node._control != empty_node._control:
                     node._control.adjust_control(node, empty_node)
 
+    def get_definitions(self) -> list[PDGDataNode]:
+        definitions: list[PDGDataNode] = []
+        for node in self._sinks:
+            if node.is_definition():
+                definitions.append(cast(PDGDataNode, node))
+        return definitions
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
