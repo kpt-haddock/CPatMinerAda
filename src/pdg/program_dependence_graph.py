@@ -634,8 +634,23 @@ class PDGGraph:
             store[key] = self.__definition_store.get(key).copy()
         return store
 
+    @multimethod
     def update_definition_store(self, store: dict[str, set[PDGDataNode]]):
         PDGGraph.update(self.__definition_store, store)
+
+    @multimethod
+    def update_definition_store(self,
+                                target: dict[str, set[PDGDataNode]],
+                                definition_counts: dict[str, int],
+                                source: dict[str, set[PDGDataNode]]):
+        for key in source.keys():
+            target[key] = source.get(key).copy()
+        for key in target.keys():
+            c: int = 1
+            if key in definition_counts:
+                c += definition_counts.get(key)
+            definition_counts[key] = c
+
 
     def clean_up(self):
         self.clear_definition_store()
