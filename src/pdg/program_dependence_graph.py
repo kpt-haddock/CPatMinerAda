@@ -782,6 +782,11 @@ class PDGGraph:
                     return cast(PDGDataNode, n)
         raise SystemExit('Error in getting the only data output node!!!')
 
+    def is_empty(self) -> bool:
+        if self._nodes:
+            return False
+        return True
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
