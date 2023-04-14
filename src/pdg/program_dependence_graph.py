@@ -769,6 +769,12 @@ class PDGGraph:
                 nodes.append(cast(PDGActionNode, node))
         return nodes
 
+    def get_only_out(self) -> PDGNode:
+        if len(self._sinks) == 1:
+            for n in self._sinks:
+                return n
+        raise RuntimeError('Error in getting the only output node!!!')
+
     def clean_up(self):
         self.clear_definition_store()
         for node in self._nodes:
