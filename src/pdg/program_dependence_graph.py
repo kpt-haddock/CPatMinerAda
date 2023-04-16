@@ -643,6 +643,25 @@ class PDGGraph:
         self.clear_definition_store()
         self.__definition_store = definition_store
 
+    def merge_parallel(self, pdgs: list[PDGGraph]):
+        definition_store: dict[str, set[PDGDataNode]] = {}
+        definition_counts: dict[str, int] = {}
+        for pdg in pdgs:
+            local_store: dict[str, set[PDGDataNode]] = self.copy_definition_store()
+            self._nodes.update(pdg._nodes)
+            self._statement_nodes.update(pdg._statement_nodes)
+            self._sinks.update(pdg._sinks)
+            self._statement_sinks.update(pdg._statement_sinks)
+            self._data_sources.update(pdg._data_sources)
+            self._statement_sources.update(pdg._statement_sources)
+            self._breaks.update(pdg._breaks)
+            self._returns.update(pdg._returns)
+            self.update_definition_store(local_store, definition_counts, pdg.__definition_store)
+            PDGGraph.add(definition_store, local_store)
+            pdg.clear()
+        self.clear_definition_store()
+        self.__definition_store = definition_store
+
     @multimethod
     def clear(self):
         self._nodes.clear()
