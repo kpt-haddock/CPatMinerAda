@@ -699,6 +699,40 @@ class PDGGraph:
         self._statement_sinks.remove(node)
         node.delete()
 
+    def build_argument_pdg(self, control: PDGNode, branch: str, exp: AdaNode) -> PDGGraph:
+        raise NotImplementedError
+
+    def build_pdg(self, control: PDGNode, branch: str, ast_node):  # ast_node: ArrayAccess
+        raise NotImplementedError
+
+    # TODO: other buildPDG methods
+
+    def merge_sequential(self, pdg: PDGGraph):
+        if not pdg._statement_nodes:
+            return
+        for source in pdg._data_sources.copy():  # why do we need a copy?
+            definitions: set[PDGDataNode] = self.__definition_store.get(source._key)
+            if definitions:
+                for definition in definitions:
+                    if definition:
+                        PDGDataEdge(definition, source, Type.REFERENCE)
+                if None not in definitions:
+                    pdg._data_sources.remove(source)
+        self.update_definition_store(pdg.__definition_store)
+        for sink in self._statement_sinks:
+            for source in pdg._statement_sources:
+                PDGDataEdge(sink, source, Type.DEPENDENCE)
+        self._data_sources.update(pdg._data_sources)
+        self._sinks.clear()
+        self._statement_sinks.clear()
+        self._statement_sinks.update(pdg._statement_sinks)
+        self._nodes.update(pdg._nodes)
+        self._statement_nodes.update(pdg._statement_nodes)
+        self._breaks.update(pdg._breaks)
+        self._returns.update(pdg._returns)
+        pdg.clear()
+
+
     @staticmethod
     def add(target: dict[str, set[object]],
             source: dict[str, set[object]]):
