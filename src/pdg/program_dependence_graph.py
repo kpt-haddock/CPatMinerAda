@@ -756,7 +756,7 @@ class PDGGraph:
             if None in s:
                 if key in target:
                     s.remove(None)
-                    target.get(key).update(s.copy()) # This copy seems unnecessary
+                    target.get(key).update(s.copy())  # This copy seems unnecessary
                 else:
                     target[key] = s.copy()
             else:
@@ -998,6 +998,38 @@ class PDGGraph:
         self.prune_data_nodes()
         self.prune_empty_statement_nodes()
         self.prune_temporary_data_dependence()
+
+    # TODO: check if no mistakes were made copying this method!
+    def prune_temporary_data_dependence(self):
+        for node in self._nodes:
+            if node == self._entry_node or node == self._end_node:
+                continue
+            i: int = 0
+            while i < len(node.get_in_edges()):
+                edge: PDGEdge = node.get_in_edges()[i]
+                if edge.get_source() != self._entry_node\
+                        and isinstance(edge, PDGDataEdge)\
+                        and edge.get_type() == Type.DEPENDENCE:
+                    del node.get_in_edges()[i]
+                    edge.get_source().get_out_edges().remove(edge)
+                    edge._source = None
+                    edge._target = None
+                else:
+                    i += 1
+            i = 0
+            while i < len(node.get_out_edges()):
+                edge: PDGEdge = node.get_out_edges()[i]
+                if edge.get_target() != self._end_node\
+                        and isinstance(edge, PDGDataEdge)\
+                        and edge.get_type() == Type.DEPENDENCE:
+                    del node.get_out_edges()[i]
+                    edge.get_target().get_in_edges().remove(edge)
+                    edge._source = None
+                    edge._target = None
+                else:
+                    i += 1
+
+
 
 
 
