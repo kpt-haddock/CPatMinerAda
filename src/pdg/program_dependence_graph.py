@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from enum import Enum
 from typing import Optional, Final, cast
 
+import libadalang
 from libadalang import AdaNode, SubpBody, ReturnStmt
 from multimethod import multimethod
 from overrides import override
@@ -57,6 +59,7 @@ class PDGNode:
         return
 
     def get_ast_node_type(self) -> int:
+        warnings.warn('AST NODE TYPE SHOULD BE AdaNode Type not int')
         return self._ast_node_type
 
     def get_ast_node(self) -> AdaNode:
@@ -786,6 +789,88 @@ class PDGGraph:
         if self._nodes:
             return False
         return True
+
+    def build_closure(self):
+        done_nodes: set[PDGNode] = set()
+        for node in self._nodes:
+            if node not in done_nodes:
+                self.build_data_closure(node, done_nodes)
+        self.build_sequential_closure()
+        done_nodes.clear()
+        done_nodes = set()  # why?
+        for node in self._nodes:
+            if node not in done_nodes:
+                self.build_control_closure(node, done_nodes)
+
+    @multimethod
+    def build_sequential_closure(self):
+        pre_nodes_of_node: dict[PDGNode, list[PDGNode]] = {self._entry_node: []}
+        for node in self._nodes:
+            if node == self._entry_node or isinstance(node, PDGControlNode):
+                branch_nodes: dict[str, list[PDGNode]] = {'T': [], 'F': [], '': []}
+                for edge in node.get_out_edges():
+                    if (edge.get_target() != self._end_node
+                            and edge.get_target()._control is not None
+                            and not isinstance(edge.get_target().get_ast_node_type(), libadalang.AssignStmt)):
+                        branch_nodes.get(edge.get_label()).append(edge.get_target())
+                for branch in branch_nodes.keys():
+                    nodes: list[PDGNode] = branch_nodes.get(branch)
+                    for i in range(0, len(nodes)): # TODO: this could be implemented with slices
+                        n: PDGNode = nodes[i]
+                        pre_nodes: list[PDGNode] = []
+                        for j in range(0, i):
+                            pre_nodes.append(nodes[j])
+                        pre_nodes_of_node[n] = pre_nodes
+        done_nodes: set[PDGNode] = {self._entry_node}
+        for node in pre_nodes_of_node.keys():
+            if node not in done_nodes:
+                self.build_sequential_closure(node, done_nodes, pre_nodes_of_node)
+        for node in pre_nodes_of_node.keys():
+            if isinstance(node, PDGActionNode):
+                for pre_node in pre_nodes_of_node.get(node):
+                    if (isinstance(pre_node, PDGActionNode)
+                            and not node.has_in_node(pre_node)
+                            and node.has_backward_data_dependence(pre_node)):
+                        PDGDataEdge(pre_node, node, Type.DEPENDENCE)
+
+    @multimethod
+    def build_sequential_closure(self, node: PDGNode, done_nodes: set[PDGNode], pre_nodes_of_node: dict[PDGNode, list[PDGNode]]):
+        if node._control not in done_nodes:
+            self.build_sequential_closure(node._control, done_nodes, pre_nodes_of_node)
+        pre_nodes_of_node.get(node).extend(pre_nodes_of_node.get(node._control))
+        done_nodes.add(node)
+
+    def build_data_closure(self, node: PDGNode, done_nodes: set[PDGNode]):
+        if not node.get_definitions():
+            for edge in node.get_in_edges().copy():  # why do we need a copy?
+                if isinstance(edge, PDGDataEdge):
+                    label: str = edge.get_label()
+                    in_nodes: list[PDGNode] = edge.get_source().get_definitions()
+                    if not in_nodes:
+                        in_nodes.append(edge.get_source())
+                    else:
+                        for in_node in in_nodes:
+                            if not node.has_in_edge(in_node, label):
+                                PDGDataEdge(in_node, node, edge.get_type())
+                    for in_node in in_nodes:
+                        if in_node not in done_nodes:
+                            self.build_data_closure(in_node, done_nodes)
+                        for in_edge in in_node.get_in_edges():
+                            if isinstance(in_edge, PDGDataEdge) and not isinstance(in_edge.get_source(), PDGDataNode):
+                                if not node.has_in_edge(in_edge.get_source(), label):
+                                    PDGDataEdge(in_edge.get_source(), node, edge.get_type())
+        done_nodes.add(node)
+
+    def build_control_closure(self, node: PDGNode, done_nodes: set[PDGNode]):
+        for edge in node.get_in_edges().copy():  # why do we need a copy?
+            if isinstance(edge, PDGControlEdge):
+                in_node: PDGNode = edge.get_source()
+                if in_node not in done_nodes:
+                    self.build_control_closure(in_node, done_nodes)
+                for in_edge in in_node.get_in_edges():
+                    if isinstance(node, (PDGActionNode, PDGControlNode)) and not node.has_in_edge(in_edge):
+                        PDGControlEdge(in_edge.get_source(), node, in_edge.get_label())
+        done_nodes.add(node)
 
     def clean_up(self):
         self.clear_definition_store()
