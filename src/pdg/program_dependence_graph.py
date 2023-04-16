@@ -674,6 +674,31 @@ class PDGGraph:
         self._returns.clear()
         self.clear_definition_store()
 
+    def delete(self, node: PDGNode):
+        if node in self._statement_sinks:
+            for edge in node.get_in_edges():
+                if isinstance(edge, PDGDataEdge):
+                    if edge.get_type() == Type.DEPENDENCE:
+                        self._statement_sinks.add(edge.get_source())
+                    elif edge.get_type() == Type.PARAMETER:
+                        self._sinks.add(edge.get_source())
+        if node in self._sinks and isinstance(node, PDGDataNode):
+            for edge in node.get_in_edges():
+                if isinstance(edge.get_source(), PDGDataNode):
+                    self._sinks.add(edge.get_source())
+        if node in self._statement_sources:
+            for edge in node.get_out_edges():
+                if isinstance(edge, PDGDataEdge) and edge.get_type() == Type.DEPENDENCE:
+                    self._statement_sources.add(edge.get_target())
+        self._nodes.remove(node)
+        self._changed_nodes.remove(node)
+        self._statement_nodes.remove(node)
+        self._data_sources.remove(node)
+        self._statement_sources.remove(node)
+        self._sinks.remove(node)
+        self._statement_sinks.remove(node)
+        node.delete()
+
     @staticmethod
     def add(target: dict[str, set[object]],
             source: dict[str, set[object]]):
