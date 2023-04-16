@@ -603,11 +603,45 @@ class PDGGraph:
     def get_nodes(self) -> set[PDGNode]:
         return self._nodes
 
-    def get_change_nodes(self) -> set[PDGNode]:
+    def get_changed_nodes(self) -> set[PDGNode]:
         return self._changed_nodes
 
     def get_exas_vector(self) -> dict[ExasFeature, int]:
         return self.__exas_vector
+
+    # TODO build_PDG methods
+
+    def merge_branches(self, pdgs: list[PDGGraph]):
+        definition_store: dict[str, set[PDGDataNode]] = {}
+        definition_counts: dict[str, int] = {}
+        self._sinks.clear()
+        self._statement_sinks.clear()
+        for pdg in pdgs:
+            self._nodes.update(pdg._nodes)
+            self._statement_nodes.update(pdg._statement_nodes)
+            self._sinks.update(pdg._sinks)
+            self._statement_sinks.update(pdg._statement_sinks)
+            for source in pdg._data_sources.copy():  # why do we need a copy?
+                definitions: set[PDGDataNode] = self.__definition_store.get(source._key)
+                if definitions is not None:
+                    for definition in definitions:
+                        if definition is not None:
+                            PDGDataEdge(definition, source, Type.REFERENCE)
+                    if None not in definitions:
+                        pdg._data_sources.remove(source)
+            self._data_sources.update(pdg._data_sources)
+            self._breaks.update(pdg._breaks)
+            self._returns.update(pdg._returns)
+        for pdg in pdgs:
+            local_store: dict[str, set[PDGDataNode]] = self.copy_definition_store()
+            self.update_definition_store(local_store, definition_counts, pdg.__definition_store)
+            PDGGraph.add(definition_store, local_store)
+            pdg.clear()
+        for key in definition_counts.keys():
+            if definition_counts.get(key) < len(pdgs):
+                definition_store.get(key).add(None)
+        self.clear_definition_store()
+        self.__definition_store = definition_store
 
     @multimethod
     def clear(self):
@@ -620,6 +654,15 @@ class PDGGraph:
         self._breaks.clear()
         self._returns.clear()
         self.clear_definition_store()
+
+    @staticmethod
+    def add(target: dict[str, set[object]],
+            source: dict[str, set[object]]):
+        for key in source.keys():
+            if key in target:
+                target.get(key).update(source.get(key).copy())
+            else:
+                target[key] = source.get(key).copy()
 
     @staticmethod
     @multimethod
@@ -871,6 +914,14 @@ class PDGGraph:
                     if isinstance(node, (PDGActionNode, PDGControlNode)) and not node.has_in_edge(in_edge):
                         PDGControlEdge(in_edge.get_source(), node, in_edge.get_label())
         done_nodes.add(node)
+
+    def prune(self):
+        self.delete(self._end_node)
+        self.prune_data_nodes()
+        self.prune_empty_statement_nodes()
+        self.prune_temporary_data_dependence()
+
+
 
     def clean_up(self):
         self.clear_definition_store()
