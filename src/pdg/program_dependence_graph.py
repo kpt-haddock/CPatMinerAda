@@ -1029,9 +1029,30 @@ class PDGGraph:
                 else:
                     i += 1
 
+    def prune_isolated_nodes(self):
+        raise NotImplementedError('This method had no uses in CPatMiner.')
 
+    def get_reachable_nodes(self) -> set[PDGNode]:
+        raise NotImplementedError('This method was used in prune_isolated_nodes.')
 
+    def prune_data_nodes(self):
+        self.prune_dummy_nodes()
 
+    def prune_dummy_nodes(self):
+        for node in self._nodes.copy():  # why do we need a copy?
+            if isinstance(node, PDGDataNode):
+                data_node: PDGDataNode = cast(PDGDataNode, node)
+                if data_node.is_dummy() and data_node.is_definition() and len(data_node.get_out_edges()) <= 1:
+                    a: PDGNode = data_node.get_in_edges()[0].get_source()
+                    s: PDGNode = a.get_in_edges()[0].get_source()
+                    if isinstance(s, PDGDataNode):
+                        dr: PDGNode = data_node.get_out_edges()[0].get_target()
+                        if len(dr.get_in_edges()) == 1:
+                            edge: PDGDataEdge = cast(PDGDataEdge, dr.get_out_edges()[0])
+                            PDGDataEdge(s, edge.get_target(), edge.get_type())
+                            self.delete(dr)
+                            self.delete(data_node)
+                            self.delete(a)
 
     def clean_up(self):
         self.clear_definition_store()
