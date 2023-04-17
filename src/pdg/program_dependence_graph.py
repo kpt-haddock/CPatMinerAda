@@ -1036,6 +1036,7 @@ class PDGGraph:
         raise NotImplementedError('This method was used in prune_isolated_nodes.')
 
     def prune_data_nodes(self):
+        # self.prune_definition_nodes()
         self.prune_dummy_nodes()
 
     def prune_dummy_nodes(self):
@@ -1053,6 +1054,88 @@ class PDGGraph:
                             self.delete(dr)
                             self.delete(data_node)
                             self.delete(a)
+
+    def prune_definition_nodes(self):
+        for node in self._nodes.copy():
+            if node.is_definition() and cast(PDGDataNode, node)._is_declaration and not node.get_out_edges():
+                for edge1 in node.get_in_edges().copy():
+                    for edge2 in edge1.get_source().get_in_edges():
+                        if isinstance(edge2, PDGDataEdge) and edge2.get_type() == Type.PARAMETER:
+                            self.delete(edge2.get_source())
+                    self.delete(edge1.get_source())
+                self.delete(node)
+
+    def prune_empty_statement_nodes(self):
+        for node in self._statement_nodes.copy():
+            if node.is_empty_node():
+                index: int = node._control.get_out_edge_index(node)
+                for out in node.get_out_edges().copy():
+                    if out.get_target()._control != node._control:
+                        out.get_source().get_out_edges().remove(out)
+                        out._source = node._control
+                        index += 1
+                        out.get_source().get_out_edges().insert(index, out)
+                self.delete(node)
+                # node = None # I do not think this statement makes sense.
+
+    @multimethod
+    def build_exas_vector(self):
+        raise NotImplementedError('This method has no usages in CPatMiner original')
+
+    @multimethod
+    def build_exas_vector(self, exas_graph: set[PDGNode], node: PDGNode):
+        raise NotImplementedError('This method was used in build_exas_vector in CPatMiner original')
+
+    def backward_dfs(self):
+        raise NotImplementedError('This method was used in build_exas_vector in CPatMiner original')
+
+    def forward_dfs(self):
+        raise NotImplementedError('This method was used in backward_dfs in CPatMiner original')
+
+    def add_feature(self):
+        raise NotImplementedError('This method was used in forward_dfs in CPatMiner original')
+
+    def print_vector(self):
+        raise NotImplementedError('This method has no usages in CPatMiner original')
+
+    def build_change_graph(self, version: int):
+        self.add_definitions()
+        # self.mark_changes(self._entry_node.get_ast_node())
+        for node in self._nodes:
+            if isinstance(node, PDGEntryNode):
+                continue
+            ast_node: AdaNode = node.get_ast_node()
+            if ast_node is not None and ada_ast_util.is_changed(ast_node):
+                definitions: list[PDGNode] = node.get_definitions()
+                if definitions:
+                    self._changed_nodes.update(definitions)
+                    for definition in definitions:
+                        definition.version = version
+                self._changed_nodes.add(node)
+                node.version = version
+        self.prune()
+        self.build_closure()
+        self.clean_up()
+
+    @multimethod
+    def add_definitions(self):
+        definitions: dict[str, PDGNode] = {}
+        for node in self._nodes.copy():
+            if isinstance(node, PDGDataNode) and not node.is_literal() and not node.is_definition():
+                self.add_definitions(cast(PDGDataNode, node), definitions)
+
+    @multimethod
+    def add_definitions(self, node: PDGDataNode, definitions: dict[str, PDGNode]):
+        if not node.get_definitions() and node.get_qualifier() is None:
+            definition: PDGNode = definitions.get(node._key)
+            if definition is None:
+                definition = PDGDataNode(None, node.get_ast_node_type(), node._key, node.get_data_type(), node.get_data_name, True, True)
+                definitions[node._key] = definition
+                self._nodes.add(definition)
+            PDGDataEdge(definition, node, Type.REFERENCE)
+            for edge in node.get_out_edges():
+                if not definition.has_out_node(edge.get_target()):
+                    PDGDataEdge(definition, edge.get_target(), cast(PDGDataEdge, edge).get_type())
 
     def clean_up(self):
         self.clear_definition_store()
