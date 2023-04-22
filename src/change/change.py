@@ -21,7 +21,6 @@ from src.utils.pair import Pair
 
 
 class ChangeNode:
-
     ast_node_type: int
     change_type: int = -1
     version: int = -1
@@ -223,12 +222,14 @@ class ChangeAnalyzer:
             for e in revision_analyzer.get_mapped_methods_m():
                 change_graph: ChangeGraph = e.get_change_graph(self.__git_connector.get_repository(), commit)
                 change_sizes: list[int] = change_graph.get_change_sizes()
-                if 100 >= change_sizes[0] > 0 and 100 >= change_sizes[1] > 0 and change_sizes[0] + change_sizes[1] >= 3 and change_graph.has_methods():
+                if 100 >= change_sizes[0] > 0 and 100 >= change_sizes[1] > 0 and change_sizes[0] + change_sizes[
+                    1] >= 3 and change_graph.has_methods():
                     cgs: dict[str, ChangeGraph] = change_graphs[e.get_change_file().get_path()]
                     if cgs is None:
                         cgs = dict()
                         change_graphs[e.get_change_file().get_path()] = cgs
-                    cgs['{},{},{},'.format(e.get_change_class().get_name(), e.get_simple_name(), e.get_parameter_types(), e._start_line)] = change_graph
+                    cgs['{},{},{},'.format(e.get_change_class().get_name(), e.get_simple_name(),
+                                           e.get_parameter_types(), e._start_line)] = change_graph
                 e.clean_for_stats()
             if len(change_graphs) > 0:
                 # write change graphs to file
@@ -314,6 +315,9 @@ class RevisionAnalyzer:
 
     def get_mapped_inits_n(self) -> set[ChangeInitializer]:
         return self.__mapped_inits_n
+
+    def analyze(self):
+        raise NotImplementedError('Not implementing SVN methods!')
 
     def analyze_git(self) -> bool:
         print(1)
@@ -551,8 +555,8 @@ class ChangeEntity:
         return self.number_of_change_trees
 
     def compute_vector_similarity(self, other: ChangeEntity) -> float:
-        v1: dict[int, int] = self._get_vector()
-        v2: dict[int, int] = other._get_vector()
+        v1: dict[int, int] = self._get_vector().copy()
+        v2: dict[int, int] = other._get_vector().copy()
         keys: set[int] = set(v1.keys()).intersection(set(v2.keys()))
 
         common_size: int = 0
@@ -562,11 +566,11 @@ class ChangeEntity:
 
     @abstractmethod
     def get_name(self) -> str:
-        ...
+        pass
 
     @abstractmethod
     def get_change_file(self) -> ChangeEntity:
-        ...
+        pass
 
     @abstractmethod
     def get_mapped_entity(self) -> Optional[ChangeEntity]:
@@ -581,11 +585,11 @@ class ChangeEntity:
 
     @abstractmethod
     def get_qualifier_name(self) -> str:
-        ...
+        pass
 
     @abstractmethod
     def get_change_class(self) -> ChangeEntity:
-        ...
+        pass
 
     def clean_for_stats(self):
         if self._tree is not None:
@@ -611,8 +615,8 @@ class ChangeClass(ChangeEntity):
     __methods: list[ChangeMethod] = []
     __initializers: list[ChangeInitializer] = []
 
-    def get_name(self) -> str:
-        return self.__simple_name
+    def __init__(self, change_file: ChangeFile, type, outer_class):
+        raise NotImplementedError
 
     @override
     def get_change_file(self) -> ChangeFile:
@@ -631,6 +635,19 @@ class ChangeClass(ChangeEntity):
     def get_simple_name(self) -> str:
         return self.__simple_name
 
+    def get_name(self) -> str:
+        return self.__simple_name
+
+    @override
+    def get_qualifier_name(self) -> str:
+        return self.__change_file.get_path() + '.' + self.__simple_name
+
+    def get_full_qualifier_name(self) -> str:
+        return self.get_qualifier_name
+
+    def get_declaration(self):
+        raise NotImplementedError('No Usage.')
+
     @override
     def get_mapped_entity(self) -> ChangeClass:
         return self.get_mapped_class()
@@ -641,12 +658,59 @@ class ChangeClass(ChangeEntity):
     def set_mapped_class(self, mapped_class: ChangeClass):
         self.__mapped_class = mapped_class
 
-    @override
-    def get_qualifier_name(self) -> str:
-        return self.__change_file.get_path() + '.' + self.__simple_name
+    def get_inner_classes(self):
+        # TODO: change compute_similarity?
+        raise NotImplementedError
 
-    def get_full_qualifier_name(self) -> str:
-        return self.get_qualifier_name
+    def get_fields(self) -> list[ChangeField]:
+        return self.__fields
+
+    def get_methods(self) -> list[ChangeMethod]:
+        return self.__methods
+
+    def get_initializers(self) -> list[ChangeInitializer]:
+        return self.__initializers
+
+    def get_field_types(self) -> dict[str, str]:
+        raise NotImplementedError('No Usage.')
+
+    def compute_similarity(self, other: ChangeClass, in_mapped: bool) -> float:
+        common_size: float = 0.0
+        total_size: float = 0.0
+        methods_m: set[ChangeMethod] = set(self.get_methods())
+        methods_n: set[ChangeMethod] = set(other.get_methods())
+        mapped_methods_m: set[ChangeMethod] = set()
+        mapped_methods_n: set[ChangeMethod] = set()
+        fields_m: set[ChangeField] = set(self.get_fields())
+        fields_n: set[ChangeField] = set(other.get_fields())
+        mapped_fields_m: set[ChangeField] = set()
+        mapped_fields_n: set[ChangeField] = set()
+        initializers_m: set[ChangeInitializer] = set(self.get_initializers())
+        initializers_n: set[ChangeInitializer] = set(other.get_initializers())
+        mapped_initializers_m: set[ChangeInitializer] = set()
+        mapped_initializers_n: set[ChangeInitializer] = set()
+
+        # TODO: type
+        size = ChangeMethod.map_all(methods_m, methods_n, mapped_methods_m, mapped_methods_n, in_mapped)
+        common_size += size[0]
+        total_size += size[1]
+
+        size = ChangeField.map_all(fields_m, fields_n, mapped_fields_m, mapped_fields_n)
+        common_size += size[0]
+        total_size += size[1]
+
+        size = ChangeInitializer.map_all(initializers_m, initializers_n, mapped_initializers_m, mapped_initializers_n)
+        common_size += size[0]
+        total_size += size[1]
+
+        # map inner classes?
+        mapped_inners_m: set[ChangeClass] = set()
+        mapped_inners_n: set[ChangeClass] = set()
+        self.map_all(self.get_inner_classes().copy(), other.get_inner_classes(), mapped_inners_m, mapped_inners_n)
+        common_size += len(mapped_inners_m)
+        total_size += len(mapped_inners_m)
+
+        return common_size / total_size
 
     @staticmethod
     def set_map(class_m: ChangeClass, class_n: ChangeClass):
@@ -710,11 +774,53 @@ class ChangeClass(ChangeEntity):
             ChangeClass.map(classes_m, classes_n, temporary_mapped_classes_m, temporary_mapped_classes_n)
             mapped_classes_m.update(temporary_mapped_classes_m)
             mapped_classes_n.update(temporary_mapped_classes_n)
-            classes_m = classes_m - temporary_mapped_classes_m
-            classes_n = classes_n - temporary_mapped_classes_n
+            classes_m.difference_update(temporary_mapped_classes_m)
+            classes_n.difference_update(temporary_mapped_classes_n)
 
     def derive_changes(self):
-        raise NotImplementedError
+        if self.__mapped_class is None:
+            return
+        change_class_n: ChangeClass = self.__mapped_class
+        same: bool = self.__simple_name == change_class_n.get_simple_name() \
+            and self.__modifiers == change_class_n.__modifiers \
+            and self.__annotation == change_class_n.__annotation
+        # and self.__super_class_names == change_class_n.__super_class_names
+        if same:
+            for change_field in self.get_fields():
+                if change_field.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        if same:
+            for change_field in change_class_n.get_fields():
+                if change_field.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        if same:
+            for change_method in self.get_methods():
+                if change_method.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        if same:
+            for change_method in change_class_n.get_methods():
+                if change_method.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        if same:
+            for change_initializer in self.get_initializers():
+                if change_initializer.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        if same:
+            for change_initializer in change_class_n.get_initializers():
+                if change_initializer.get_change_type() != Type.UNCHANGED:
+                    same = False
+                    break
+        # TODO: inner_classes? skipped for now.
+        if not same:
+            self.set_change_type(Type.MODIFIED)
+            change_class_n.set_change_type(Type.MODIFIED)
+
+
 
     @multimethod
     def print_changes(self, stream):
@@ -725,7 +831,7 @@ class ChangeClass(ChangeEntity):
         raise NotImplementedError
 
     def has_changed_name(self) -> bool:
-        raise NotImplementedError
+        raise NotImplementedError('No Usage.')
 
     def __str__(self) -> str:
         return self.get_name()
@@ -875,9 +981,11 @@ class ChangeField(ChangeEntity):
             mapped_fields_m.add(change_field_m)
             mapped_fields_n.add(change_field_n)
             for p in pairs_of_methods1[change_field_m]:
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
             for p in pairs_of_methods2[change_field_n]:
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
 
     @staticmethod
     def map_all(fields_m: set[ChangeField], fields_n: set[ChangeField], mapped_fields_m: set[ChangeField],
@@ -1145,10 +1253,10 @@ class ChangeMethod(ChangeEntity):
             for change_method_n in methods_n:
                 similarity: list[float] = change_method_m.compute_similarity(change_method_n, in_mapped_classes)
                 is_mapped: bool = (in_mapped_classes
-                                   and similarity[0] >= ChangeMethod.__threshold_signature_similarity)\
-                    or (similarity[0] > 0 and similarity[1] == 1.0) \
-                    or (similarity[0] >= ChangeMethod.__threshold_signature_similarity
-                        and similarity[1] >= ChangeMethod.__threshold_body_similarity)
+                                   and similarity[0] >= ChangeMethod.__threshold_signature_similarity) \
+                                  or (similarity[0] > 0 and similarity[1] == 1.0) \
+                                  or (similarity[0] >= ChangeMethod.__threshold_signature_similarity
+                                      and similarity[1] >= ChangeMethod.__threshold_body_similarity)
                 if is_mapped:
                     pair: Pair = Pair(change_method_m, change_method_n, similarity[3])
                     pairs1.add(pair)
@@ -1203,7 +1311,7 @@ class ChangeMethod(ChangeEntity):
                 mapped_methods_m: set[ChangeMethod],
                 mapped_methods_n: set[ChangeMethod],
                 in_mapped_classes: bool) -> tuple[float, float]:
-        size: tuple[float, float] =\
+        size: tuple[float, float] = \
             (0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0)
         #  map methods with same simple names and numbers of parameters
         methods_with_name_m: dict[str, set[ChangeMethod]] = {}
@@ -1330,18 +1438,21 @@ class ChangeMethod(ChangeEntity):
 
     def get_change_graph(self, repository, commit):
         # TODO
-        pdg1: PDGGraph = PDGGraph(self.__declaration, PDGBuildingContext(repository, commit, self.get_change_file().get_path(), False))
+        pdg1: PDGGraph = PDGGraph(self.__declaration,
+                                  PDGBuildingContext(repository, commit, self.get_change_file().get_path(), False))
         pdg1.build_change_graph(0)
-        pdg2: PDGGraph = PDGGraph(self.__mapped_method.__declaration, PDGBuildingContext(repository, commit, self.__mapped_method.get_change_file().get_path(), False))
+        pdg2: PDGGraph = PDGGraph(self.__mapped_method.__declaration, PDGBuildingContext(repository, commit,
+                                                                                         self.__mapped_method.get_change_file().get_path(),
+                                                                                         False))
         pdg2.build_change_graph(1)
         pdg2.build_change_graph(pdg1)
         return ChangeGraph(pdg2)
 
-class ChangeProject:
 
-    __fixing_revisions: dict[str, list[int]]                 # static
-    __interesting_ast_node_type_ids: set[int] = set()           # static
-    __interesting_ast_node_type_names: set[str] = set()      # static
+class ChangeProject:
+    __fixing_revisions: dict[str, list[int]]  # static
+    __interesting_ast_node_type_ids: set[int] = set()  # static
+    __interesting_ast_node_type_names: set[str] = set()  # static
     density_bins: list[int] = [
         2, 4, 8, 16, 32, 64, 128
     ]
