@@ -1,9 +1,37 @@
-from libadalang import AdaNode
+from typing import Type
+
+from libadalang import AdaNode, _kind_to_astnode_cls
+from multimethod import multimethod
 
 
+@multimethod
 def is_literal(ast_node_type: int) -> bool:
-    raise NotImplementedError('ada_ast_util is_literal')
+    return _kind_to_astnode_cls[ast_node_type].__name__.endswith('Literal')
 
 
+@multimethod
 def is_literal(node: AdaNode) -> bool:
-    raise NotImplementedError('ada_ast_util is_literal')
+    return node.__class__.__name__.endswith('Literal')
+
+
+def is_changed(node: AdaNode) -> bool:
+    raise NotImplementedError('ada_ast_util is_changed')
+
+
+@multimethod
+def node_type(node_class: Type[object]) -> int:
+    return list(_kind_to_astnode_cls.keys())[list(_kind_to_astnode_cls.values()).index(node_class)]
+
+
+@multimethod
+def node_type(node: AdaNode) -> int:
+    return node_type(node.__class__)
+
+
+def start_position(node: AdaNode) -> int:
+    lines: list[str] = node.unit.root.text.split('\r\n')
+    position: int = 0
+    for i in range(0, node.sloc_range.start.line - 1):
+        position += len(lines[i])
+    position += node.sloc_range.start.column
+    return position
