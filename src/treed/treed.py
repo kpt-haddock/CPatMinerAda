@@ -36,6 +36,7 @@ class TreedConstants:
 
 
 class TreedBuilder(AdaNodeVisitor):
+    # TODO: these should probably be Instance variables and not Class variables!
     __root: AdaNode
     __visit_doc_tags: bool
     tree: dict[AdaNode, list[AdaNode]] = dict()
@@ -144,6 +145,7 @@ class PrintVisitor(AdaNodeVisitor):
 
 
 class TreedMapper:
+    # TODO: these variables probably should not be Class variables, but Instance variables instead.
     __ast_m: AdaNode
     __ast_n: AdaNode
     __tree: dict[AdaNode, list[AdaNode]] = dict()
@@ -721,7 +723,7 @@ class TreedMapper:
                     # mapped_children_n.append(cast(DefiningName, node_n).f_name)
                     pass
                 elif node_m.is_a(Expr):
-                    print('Expr: {}'.format(node_m))
+                    pass
                 if mapped_children_m and mapped_children_n:
                     for i in range(0, len(mapped_children_m)):
                         child_m: AdaNode = mapped_children_m[i]
@@ -732,7 +734,6 @@ class TreedMapper:
                                 if child_m.kind_name == child_n.kind_name:
                                     if node_m.is_a(BlockStmt) or (len(self.__tree_map.get(child_m)) == 0 and len(self.__tree_map.get(child_n)) == 0):
                                         similarity = 1.0
-                                        print('BlockStmt: {}'.format(node_m))
                                     else:
                                         similarity = self._compute_similarity(child_m, child_n, TreedConstants.MIN_SIMILARITY)
                                     if similarity >= TreedConstants.MIN_SIMILARITY:
@@ -901,11 +902,8 @@ class TreedUtils:
     def build_label_for_vector(node: AdaNode) -> int:
         label: int = list(_kind_to_astnode_cls.keys())[list(_kind_to_astnode_cls.values()).index(node.__class__)]
         if node.is_a(Expr):
-            print('EXPR: {}'.format(node))
-            # if node.kind_name.endswith('Literal'):
-            #     print(label)
-            #     print('Literal')
-            #     return (label | (hash(node.text) << 7)) & 0xFFFF
+            if node.kind_name.endswith('Literal'):
+                return (label | (hash(node.text) << 7)) & 0x10ffff
             if node.is_a(Identifier):
                 return (label | (hash(node.text) << 7)) & 0x10ffff
         warn('build_label_for_vector not fully implemented.')
