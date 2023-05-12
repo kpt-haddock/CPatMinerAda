@@ -1,12 +1,12 @@
 import subprocess
 from typing import Optional
 
+from graphviz import Digraph
 from multimethod import multimethod
 
-from src.change.change_graph import ChangeGraph
-from src.change.change_node import ChangeNode
-from src.pdg.graph import PDGGraph, PDGNode, PDGDataNode, PDGActionNode, PDGControlNode, PDGEntryNode, PDGDataEdge, \
-    Type, PDGControlEdge
+from src.change import ChangeNode, ChangeGraph
+from src.pdg import PDGNode, PDGGraph, PDGEntryNode, PDGControlNode, PDGActionNode, PDGDataNode, PDGDataEdge, Type, \
+    PDGControlEdge
 
 
 class DotGraph:
@@ -20,6 +20,7 @@ class DotGraph:
     DOT_PATH: str = 'C:/....path to dot.exe'
     
     __graph: str = ''
+    dot: Digraph
 
     @multimethod
     def __init__(self, graph: str):
@@ -63,7 +64,7 @@ class DotGraph:
 
     @multimethod
     def __init__(self, pdg: PDGGraph, change_only: bool):
-        self.__graph += self.add_start()
+        self.dot = Digraph()
 
         ids: dict[PDGNode, int] = {}
         #  add nodes
@@ -77,13 +78,13 @@ class DotGraph:
             if pdg.is_changed_node(node):
                 color = DotGraph.COLOR_RED
             if isinstance(node, PDGEntryNode):
-                self.__graph += self.add_node(id, node.get_label(), DotGraph.SHAPE_ELLIPSE, DotGraph.STYLE_DOTTED, color, color)
+                self.dot.node(str(id), node.get_label(), style='dotted', shape=DotGraph.SHAPE_ELLIPSE)
             elif isinstance(node, PDGControlNode):
-                self.__graph += self.add_node(id, node.get_label(), DotGraph.SHAPE_DIAMOND, None, color, color)
+                self.dot.node(str(id), node.get_label(), shape=DotGraph.SHAPE_DIAMOND)
             elif isinstance(node, PDGActionNode):
-                self.__graph += self.add_node(id, node.get_label(), DotGraph.SHAPE_BOX, None, color, color)
+                self.dot.node(str(id), node.get_label(), shape=DotGraph.SHAPE_BOX)
             elif isinstance(node, PDGDataNode):
-                self.__graph += self.add_node(id, node.get_label(), DotGraph.SHAPE_ELLIPSE, None, color, color)
+                self.dot.node(str(id), node.get_label(), shape=DotGraph.SHAPE_ELLIPSE)
 
         #  add edges
         for node in pdg.get_nodes():
@@ -101,9 +102,7 @@ class DotGraph:
                     if label in number_of_edges:
                         n += number_of_edges[label]
                     number_of_edges[label] = n
-                    if edge.get_type() == Type.PARAMETER:
-                        label += n
-                    self.__graph += self.add_edge(s_id, t_id, DotGraph.STYLE_DOTTED, None, label)
+                    self.dot.edge(str(s_id), str(t_id), style=DotGraph.STYLE_DOTTED, label=label + (str(n) if edge.get_type() == Type.PARAMETER else ''))
                 elif isinstance(edge, PDGControlEdge):
                     source: PDGNode = edge.get_source()
                     if isinstance(source, PDGEntryNode) or isinstance(source, PDGControlNode):
@@ -113,12 +112,11 @@ class DotGraph:
                                 n += 1
                             if out == edge:
                                 break
-                        self.__graph += self.add_edge(s_id, t_id, None, None, label + str(n))
+                        self.dot.edge(str(s_id), str(t_id), label=label + str(n))
                     else:
-                        self.__graph += self.add_edge(s_id, t_id, None, None, label)
+                        self.dot.edge(str(s_id), str(t_id), label=label)
                 else:
-                    self.__graph += self.add_edge(s_id, t_id, None, None, label)
-            self.__graph += self.add_end()
+                    self.dot.edge(str(s_id), str(t_id), label=label)
 
     @staticmethod
     def add_node(id: int, label: str, shape: Optional[str], style: Optional[str],
@@ -161,5 +159,5 @@ class DotGraph:
             f.write(self.__graph)
 
     def to_graphics(self, file: str, type: str):
-        subprocess.call([self.DOT_PATH, '-T{}'.format(type), '{}.dot'.format(file), '-o{}.{}'.format(file, type)])
-        
+        self.dot.render(view=True)
+        # subprocess.call([self.DOT_PATH, '-T{}'.format(type), '{}.dot'.format(file), '-o{}.{}'.format(file, type)])
