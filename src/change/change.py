@@ -4,6 +4,7 @@ from abc import abstractmethod
 from collections import deque
 from enum import Enum
 from typing import Optional, cast
+from warnings import warn
 
 import libadalang
 from git import Commit, DiffIndex
@@ -362,12 +363,12 @@ class RevisionAnalyzer:
                         old_content = diff.a_blob.data_stream.read().decode('ISO-8859-2')
                         print(old_content)
                     except:
-                        print('Error reading file: ' + diff.a_blob.path)
+                        warn('Error reading file: ' + diff.a_blob.path)
                         continue
                     try:
                         new_content = diff.b_blob.data_stream.read().decode('ISO-8859-2')
                     except:
-                        print('Error reading file: ' + diff.b_blob.path)
+                        warn('Error reading file: ' + diff.b_blob.path)
                         continue
                     file_m: ChangeFile = ChangeFile(self, diff.a_blob.path, old_content)
                     file_n: ChangeFile = ChangeFile(self, diff.b_blob.path, new_content)
@@ -820,8 +821,6 @@ class ChangeClass(ChangeEntity):
             self.set_change_type(Type.MODIFIED)
             change_class_n.set_change_type(Type.MODIFIED)
 
-
-
     @multimethod
     def print_changes(self, stream):
         raise NotImplementedError
@@ -896,7 +895,7 @@ class ChangeField(ChangeEntity):
     def get_mapped_field(self) -> ChangeField:
         return self.__mapped_field
 
-    def set_mapped_field(self, mapped_field: ChangeField):
+    def set_mapped_field(self, mapped_field: Optional[ChangeField]):
         self.__mapped_field = mapped_field
 
     def get_types(self) -> set[str]:
@@ -1048,6 +1047,7 @@ class ChangeFile(ChangeEntity):
         self.__context = AnalysisContext()
         self.__unit = self.__context.get_from_file(path)
 
+
     def get_revision_analyzer(self) -> RevisionAnalyzer:
         return self.__revision_analyzer
 
@@ -1185,7 +1185,13 @@ class ChangeMethod(ChangeEntity):
     __local_var_locs: dict[libadalang.Identifier, set[libadalang.Identifier]] = dict()
 
     def __init__(self, change_class: ChangeClass, method: None):
-        pass
+        raise NotImplementedError
+
+    def get_modifiers(self) -> int:
+        raise NotImplementedError('No usage.')
+
+    def get_annotations(self) -> str:
+        raise NotImplementedError('No usage.')
 
     @override
     def get_name(self) -> str:
@@ -1194,6 +1200,7 @@ class ChangeMethod(ChangeEntity):
     def get_simple_name(self) -> str:
         return self.__simple_name
 
+    @override
     def get_qualifier_name(self) -> str:
         return self.__change_class.get_simple_name() + '.' + self.__name
 
@@ -1203,25 +1210,27 @@ class ChangeMethod(ChangeEntity):
     def get_parameter_types(self) -> str:
         return self.__parameter_types
 
-    def get_return_types(self) -> str:
+    def get_return_type(self) -> str:
         return self.__return_type
 
     def get_full_name(self) -> str:
         return self.__simple_name + self.__parameter_types
 
+    def get_full_qualifier_name(self) -> str:
+        raise NotImplementedError('No usage.')
+
+    def get_declaration(self):
+        raise NotImplementedError('No usage.')
+
     @override
     def get_mapped_entity(self) -> Optional[ChangeMethod]:
         return self.get_mapped_method()
 
-    def set_mapped_method(self, mapped_method: ChangeMethod):
-        self.__mapped_method = mapped_method
-
     def get_mapped_method(self) -> ChangeMethod:
         return self.__mapped_method
 
-    @override
-    def get_qualifier_name(self) -> str:
-        return self.__change_class.get_simple_name() + '.' + self.__name
+    def set_mapped_method(self, mapped_method: Optional[ChangeMethod]):
+        self.__mapped_method = mapped_method
 
     @override
     def get_change_file(self) -> ChangeFile:
@@ -1310,9 +1319,9 @@ class ChangeMethod(ChangeEntity):
                 methods_n: set[ChangeMethod],
                 mapped_methods_m: set[ChangeMethod],
                 mapped_methods_n: set[ChangeMethod],
-                in_mapped_classes: bool) -> tuple[float, float]:
-        size: tuple[float, float] = \
-            (0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0)
+                in_mapped_classes: bool) -> list[float]:
+        size: list[float] = \
+            [0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0]
         #  map methods with same simple names and numbers of parameters
         methods_with_name_m: dict[str, set[ChangeMethod]] = {}
         methods_with_name_n: dict[str, set[ChangeMethod]] = {}
