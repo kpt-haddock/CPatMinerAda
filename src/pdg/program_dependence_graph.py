@@ -4,7 +4,7 @@ import abc
 import warnings
 from collections import deque
 from enum import Enum
-from typing import Optional, Final, cast
+from typing import Optional, Final, cast, Generator
 from warnings import warn
 
 from libadalang import *
@@ -22,7 +22,7 @@ def overlap(s1: set, s2: set) -> bool:
 
 class PDGNode:
     __metaclass__ = abc.ABCMeta
-    _PREFIX_DUMMY: Final[str] = 'dummy_'
+    PREFIX_DUMMY: Final[str] = 'dummy_'
 
     _ast_node: Optional[AdaNode]
     _ast_node_type: int
@@ -90,6 +90,9 @@ class PDGNode:
 
     def add_out_edge(self, edge: PDGEdge):
         self._out_edges.append(edge)
+
+    def get_key(self) -> Optional[str]:
+        return self._key
 
     def is_literal(self) -> bool:
         return ada_ast_util.is_literal(self._ast_node_type)
@@ -573,7 +576,9 @@ class PDGDataNode(PDGNode):
 
     @multimethod
     def __init__(self, ast_node: Optional[AdaNode], node_type: int, key: str, data_type: Optional[str], data_name: str, is_field: bool, is_declaration: bool):
-        self.__init__(ast_node, node_type, key, data_type, data_name)
+        super().__init__(ast_node, node_type, key)
+        self._data_type = data_type
+        self._data_name = data_name
         self._is_field = is_field
         self._is_declaration = is_declaration
 
@@ -581,6 +586,7 @@ class PDGDataNode(PDGNode):
     def __init__(self, node: PDGDataNode):
         self.__init__(node.get_ast_node(),
                       node.get_ast_node_type(),
+                      node._key,
                       node._data_type,
                       node._data_name,
                       node._is_field,
@@ -615,7 +621,7 @@ class PDGDataNode(PDGNode):
         return False
 
     def is_dummy(self) -> bool:
-        return self._key.startswith(self._PREFIX_DUMMY)
+        return self._key.startswith(self.PREFIX_DUMMY)
 
     def get_qualifier(self) -> Optional[PDGNode]:
         for edge in self.get_in_edges():
@@ -753,6 +759,7 @@ class PDGGraph:
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node_list: AdaNodeList) -> PDGGraph:
+        # TODO: test this and double check with original CPatMiner!!!
         nodes = iter(node_list)
         if len(node_list):
             graph: PDGGraph = self.build_pdg(control, branch, next(nodes))
@@ -782,11 +789,86 @@ class PDGGraph:
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: Aggregate) -> PDGGraph:
-        raise NotImplementedError
+        if node.f_ancestor_expr:
+            raise NotImplementedError(node.f_ancestor_expr)
+        graphs: list[PDGGraph] = []
+        for assoc in node.f_assocs:
+            graphs.append(self.build_argument_pdg(control, branch, assoc))
+        action_node: PDGActionNode = PDGActionNode(
+            control,
+            branch,
+            node,
+            node_type(node),
+            None,
+            'Aggregate',
+            'Aggregate'
+        )
+        if graphs:
+            for graph in graphs:
+                graph.merge_sequential_data(action_node, Type.PARAMETER)
+            graph: PDGGraph = PDGGraph(self.__context)
+            graph.merge_parallel(graphs)
+            return graph
+        else:
+            return PDGGraph(self.__context, action_node)
 
     @multimethod
-    def build_pdg(self, control: PDGNode, branch: str, node: AssocList) -> PDGGraph:
-        raise NotImplementedError
+    def build_pdg(self, control: PDGNode, branch: str, nodes: AlternativesList) -> PDGGraph:
+        if len(nodes) == 1:
+            return self.build_pdg(control, branch, nodes[0])
+        graphs: list[PDGGraph] = []
+        for node in nodes:
+            graphs.append(self.build_pdg(control, branch, node))
+        alternatives_node: PDGActionNode = PDGActionNode(
+            control,
+            branch,
+            nodes,
+            node_type(nodes),
+            None,
+            None,
+            'Alternatives'
+        )
+        for graph in graphs:
+            graph.merge_sequential_data(alternatives_node, Type.PARAMETER)
+        graph: PDGGraph = PDGGraph(self.__context)
+        graph.merge_parallel(graphs)
+        return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: AggregateAssoc) -> PDGGraph:
+        graph: PDGGraph = PDGGraph(self.__context)
+        designators_graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_designators)
+        expr_graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_r_expr)
+        assoc_node: PDGActionNode = PDGActionNode(control, branch, node, node_type(node), None, None, '=>')
+        designators_graph.merge_sequential_data(assoc_node, Type.PARAMETER)
+        expr_graph.merge_sequential_data(assoc_node, Type.PARAMETER)
+        graph.merge_parallel([designators_graph, expr_graph])
+        return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: BracketAggregate) -> PDGGraph:
+        if node.f_ancestor_expr:
+            raise NotImplementedError(node.f_ancestor_expr)
+        graphs: list[PDGGraph] = []
+        for assoc in node.f_assocs:
+            graphs.append(self.build_argument_pdg(control, branch, assoc))
+        action_node: PDGActionNode = PDGActionNode(
+            control,
+            branch,
+            node,
+            node_type(node),
+            None,
+            'Bracket Aggregate',
+            'Bracket Aggregate'
+        )
+        if graphs:
+            for graph in graphs:
+                graph.merge_sequential_data(action_node, Type.PARAMETER)
+            graph: PDGGraph = PDGGraph(self.__context)
+            graph.merge_parallel(graphs)
+            return graph
+        else:
+            return PDGGraph(self.__context, action_node)
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: AssignStmt) -> PDGGraph:
@@ -826,12 +908,12 @@ class PDGGraph:
         else:
             if definitions[0].is_dummy():
                 for definition in definitions:
-                    del graph.__definition_store[definition._key]
+                    del graph.__definition_store[definition.get_key()]
                     definition.copy_data(dest_node)
-                    ns: Optional[set[PDGDataNode]] = graph.__definition_store.get(definition._key, None)
+                    ns: Optional[set[PDGDataNode]] = graph.__definition_store.get(definition.get_key(), None)
                     if ns is None:
                         ns = set()
-                        graph.__definition_store[definition._key] = ns
+                        graph.__definition_store[definition.get_key()] = ns
                     ns.add(definition)
             else:
                 definition: PDGDataNode = definitions[0]
@@ -839,7 +921,7 @@ class PDGGraph:
                     PDGDataNode(
                         None,
                         definition.get_ast_node_type(),
-                        definition._key,
+                        definition.get_key(),
                         definition.get_data_type(),
                         definition.get_data_name()
                     ),
@@ -901,8 +983,12 @@ class PDGGraph:
                 raise NotImplementedError
 
         graph: Optional[PDGGraph] = None
+        graphs[0].merge_sequential_data(action_node, Type.RECEIVER)
         if graphs:
-            pass
+            for i in range(1, len(graphs)):
+                graphs[0].merge_sequential_data(action_node, Type.PARAMETER)
+            graph = PDGGraph(self.__context)
+            graph.merge_parallel(graphs)
         else:
             graph = PDGGraph(self.__context, action_node)
         return graph
@@ -917,6 +1003,8 @@ class PDGGraph:
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: CaseStmt):
+
+        print(CaseStmt)
         raise NotImplementedError
 
     @multimethod
@@ -967,15 +1055,126 @@ class PDGGraph:
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: ExitStmt) -> PDGGraph:
-        raise NotImplementedError
+        action_node: PDGActionNode = PDGActionNode(
+            control,
+            branch,
+            node,
+            node_type(node),
+            node.f_loop_name.text if node.f_loop_name else '',
+            None,
+            'Exit'
+        )
+        if node.f_cond_expr:
+            raise NotImplementedError('Conditional Exit not supported!')
+        graph: PDGGraph = PDGGraph(self.__context, action_node)
+        graph._breaks.add(action_node)
+        graph._sinks.remove(action_node)
+        graph._statement_sinks.remove(action_node)
+        return graph
 
     @multimethod
-    def build_pdg(self, control: PDGNode, branch: str, node: ForLoopStmt):
+    def build_pdg(self, control: PDGNode, branch: str, node: ExtendedReturnStmt) -> PDGGraph:
         self.__context.add_scope()
-        graph: Optional[PDGGraph] = None
+        graph: PDGGraph = self.build_pdg(control, branch, node.f_decl)
+        statements_graph: PDGGraph = self.build_pdg(control, branch, node.f_stmts)
+        if not statements_graph.is_empty():
+            graph.merge_sequential(statements_graph)
 
+        return_node: PDGActionNode = PDGActionNode(
+            control, branch, node, node_type(node), None, None, 'return'
+        )
+        name: Identifier = node.f_decl.f_ids[0].f_name
+        name_graph: PDGGraph = self.build_argument_pdg(control, branch, name)
+        name_graph.merge_sequential_data(return_node, Type.PARAMETER)
+        graph.merge_sequential(name_graph)
+        graph._returns.add(return_node)
+        graph._sinks.clear()
+        graph._statement_sinks.clear()
         self.__context.remove_scope()
-        raise NotImplementedError
+        return graph
+
+    # @multimethod
+    # def build_pdg(self, control: PDGNode, branch: str, node: ExtendedReturnStmtObjectDecl) -> PDGGraph:
+    #     pass
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: ForLoopSpec) -> PDGGraph:
+        var_decl_node: PDGDataNode = self.build_pdg_data_node(control, branch, node.f_var_decl)
+        if isinstance(node.f_has_reverse, ReversePresent):
+            raise NotImplementedError(ReversePresent)
+        if node.f_iter_filter:
+            raise NotImplementedError(node.f_iter_filter)
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_iter_expr)
+        graph.merge_sequential_data(
+            PDGActionNode(
+                control,
+                branch,
+                node,
+                node_type(AssignStmt),
+                None,
+                None,
+                ':='
+            ),
+            Type.PARAMETER
+        )
+        graph.merge_sequential_data(var_decl_node, Type.DEFINITION)
+        graph.merge_sequential_data(
+            PDGDataNode(
+                None,
+                var_decl_node.get_ast_node_type(),
+                var_decl_node.get_key(),
+                var_decl_node.get_data_type(),
+                var_decl_node.get_data_name()
+            ),
+            Type.REFERENCE
+        )
+        return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: ForLoopStmt) -> PDGGraph:
+        self.__context.add_scope()
+        graph: PDGGraph = self.build_pdg(control, branch, node.f_spec)
+        control_node: PDGControlNode = PDGControlNode(control, branch, node, node_type(node))
+        graph.merge_sequential_data(control_node, Type.CONDITION)
+        graph.merge_sequential_control(
+            PDGActionNode(
+                control_node,
+                '',
+                None,
+                node_type(NullStmt),
+                None,
+                None,
+                'empty',
+            ),
+            ''
+        )
+        statements_graph: PDGGraph = self.build_pdg(control, branch, node.f_stmts)
+        if not statements_graph.is_empty():
+            graph.merge_sequential(statements_graph)
+        graph.adjust_break_nodes('')
+        self.__context.remove_scope()
+        return graph
+
+    @multimethod
+    def build_pdg_data_node(self, control: PDGNode, branch: str, node: ForLoopVarDecl) -> PDGDataNode:
+        if node.f_aspects:
+            NotImplementedError(node.f_aspects)
+        if node.f_id_type:
+            print(node.f_id_type)
+        else:
+            print('no f_id_type')
+        name: Identifier = node.f_id.f_name
+        self.__context.add_local_variable(name.text, str(start_position(name)), '')  # TODO?: type
+        return PDGDataNode(
+            name,
+            node_type(name),
+            str(start_position(name)),
+            '',  # TODO?: type
+            name.text,
+            False,
+            True
+        )
+
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: HandledStmts):
@@ -991,7 +1190,137 @@ class PDGGraph:
                 PDGDataNode(node, node_type(node), info[0], info[1], name, False, False)
             )
             return graph
+        if name.lower() == 'true' or name.lower() == 'false':
+            return PDGGraph(
+                self.__context,
+                PDGDataNode(
+                    node,
+                    node_type(node),
+                    name,
+                    'Boolean',
+                    name
+                )
+            )
         raise NotImplementedError
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, nodes: list[ElsifExprPart], else_expr: Expr):
+        node: ElsifExprPart = nodes[0]
+        remaining_nodes: list[ElsifExprPart] = nodes[1:]
+        dummy_node: PDGDataNode = PDGDataNode(
+            None,
+            node_type(Identifier),
+            PDGNode.PREFIX_DUMMY + str(start_position(node)) + '_' + str(start_position(node) + len(node.text)),
+            'Boolean',
+            PDGNode.PREFIX_DUMMY,
+            False,
+            True
+        )
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_cond_expr)
+        control_node: PDGControlNode = PDGControlNode(
+            control, branch, node, node_type(node)
+        )
+        graph.merge_sequential_data(control_node, Type.CONDITION)
+        then_graph: PDGGraph = self.build_argument_pdg(control_node, 'T', node.f_then_expr)
+        then_graph.merge_sequential_data(
+            PDGActionNode(control_node, 'T', None, node_type(AssignStmt), None, None, ':='),
+            Type.PARAMETER
+        )
+        then_graph.merge_sequential_data(PDGDataNode(dummy_node), Type.DEFINITION)
+
+        if remaining_nodes:
+            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F', remaining_nodes, else_expr)
+            graph.merge_branches([then_graph, alternatives_graph])
+        else:
+            else_graph: PDGGraph = self.build_argument_pdg(control_node, 'F', else_expr)
+            else_graph.merge_sequential_data(
+                PDGActionNode(control_node, 'F', None, node_type(AssignStmt), None, None, ':='),
+                Type.PARAMETER
+            )
+            else_graph.merge_sequential_data(PDGDataNode(dummy_node), Type.DEFINITION)
+            graph.merge_branches([then_graph, else_graph])
+        return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: IfExpr) -> PDGGraph:
+        dummy_node: PDGDataNode = PDGDataNode(
+            None,
+            node_type(Identifier),
+            PDGNode.PREFIX_DUMMY + str(start_position(node)) + '_' + str(start_position(node) + len(node.text)),
+            'Boolean',
+            PDGNode.PREFIX_DUMMY,
+            False,
+            True
+        )
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_cond_expr)
+        control_node: PDGControlNode = PDGControlNode(
+            control, branch, node, node_type(node)
+        )
+        graph.merge_sequential_data(control_node, Type.CONDITION)
+        then_graph: PDGGraph = self.build_argument_pdg(control_node, 'T', node.f_then_expr)
+        then_graph.merge_sequential_data(
+            PDGActionNode(control_node, 'T', None, node_type(AssignStmt), None, None, ':='),
+            Type.PARAMETER
+        )
+        then_graph.merge_sequential_data(PDGDataNode(dummy_node), Type.DEFINITION)
+
+        if len(node.f_alternatives):
+            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F', list(node.f_alternatives), node.f_else_expr)
+            graph.merge_branches([then_graph, alternatives_graph])
+        else:
+            else_graph: PDGGraph = self.build_argument_pdg(control_node, 'F', node.f_else_expr)
+            else_graph.merge_sequential_data(
+                PDGActionNode(control_node, 'F', None, node_type(AssignStmt), None, None, ':='),
+                Type.PARAMETER
+            )
+            else_graph.merge_sequential_data(PDGDataNode(dummy_node), Type.DEFINITION)
+            graph.merge_branches([then_graph, else_graph])
+        return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, nodes: list[ElsifStmtPart], else_stmts: StmtList) -> PDGGraph:
+        node: ElsifStmtPart = nodes[0]
+        remaining_nodes: list[ElsifStmtPart] = nodes[1:]
+        graph: PDGGraph = self.build_pdg(control, branch, node.f_cond_expr)
+        control_node: PDGControlNode = PDGControlNode(control, branch, node, node_type(node))
+        graph.merge_sequential_data(control_node, Type.CONDITION)
+        empty_then_graph: PDGGraph = PDGGraph(
+            self.__context,
+            PDGActionNode(
+                control_node,
+                'T',
+                None,
+                node_type(NullStmt),
+                None,
+                None,
+                'empty'
+            )
+        )
+        then_graph: PDGGraph = self.build_pdg(control_node, 'T', node.f_stmts)
+        if not then_graph.is_empty():
+            empty_then_graph.merge_sequential(then_graph)
+        empty_else_graph: PDGGraph = PDGGraph(
+            self.__context,
+            PDGActionNode(
+                control_node,
+                'F',
+                None,
+                node_type(NullStmt),
+                None,
+                None,
+                'empty'
+            )
+        )
+        if remaining_nodes:
+            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F', remaining_nodes, else_stmts)
+            if not alternatives_graph.is_empty():
+                empty_else_graph.merge_sequential(alternatives_graph)
+        elif else_stmts:
+            else_graph: PDGGraph = self.build_pdg(control_node, 'F', else_stmts)
+            if not else_graph.is_empty():
+                empty_else_graph.merge_sequential(else_graph)
+        graph.merge_branches([empty_then_graph, empty_else_graph])
+        return graph
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: IfStmt) -> PDGGraph:
@@ -999,34 +1328,44 @@ class PDGGraph:
         graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_cond_expr)
         control_node: PDGControlNode = PDGControlNode(control, branch, node, node_type(node))
         graph.merge_sequential_data(control_node, Type.CONDITION)
-        empty_t_graph: PDGGraph = PDGGraph(self.__context,
-                                           PDGActionNode(
-                                               control_node,
-                                               'T',
-                                               None,
-                                               node_type(NullStmt),
-                                               None,
-                                               None,
-                                               'empty'
-                                           ))
-        t_graph: PDGGraph = self.build_pdg(control_node, 'T', node.f_then_stmts)
-        if not t_graph.is_empty():
-            empty_t_graph.merge_sequential(t_graph)
-        empty_f_graph: PDGGraph = PDGGraph(self.__context,
-                                           PDGActionNode(
-                                               control_node,
-                                               'F',
-                                               None,
-                                               node_type(NullStmt),
-                                               None,
-                                               None,
-                                               'Empty'
-                                           ))
-        if node.f_else_stmts:
-            f_graph: PDGGraph = self.build_pdg(control_node, 'F', node.f_else_stmts)
-            if not f_graph.is_empty():
-                empty_t_graph.merge_sequential(f_graph)
-        graph.merge_branches(empty_t_graph, empty_f_graph)
+        empty_then_graph: PDGGraph = PDGGraph(
+            self.__context,
+            PDGActionNode(
+                control_node,
+                'T',
+                None,
+                node_type(NullStmt),
+                None,
+                None,
+                'empty'
+            )
+        )
+        then_graph: PDGGraph = self.build_pdg(control_node, 'T', node.f_then_stmts)
+        if not then_graph.is_empty():
+            empty_then_graph.merge_sequential(then_graph)
+        empty_else_graph: PDGGraph = PDGGraph(
+            self.__context,
+            PDGActionNode(
+                control_node,
+                'F',
+                None,
+                node_type(NullStmt),
+                None,
+                None,
+                'empty'
+            )
+        )
+
+        if node.f_alternatives:
+            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F',
+                                                          list(node.f_alternatives), node.f_else_stmts)
+            if not alternatives_graph.is_empty():
+                empty_else_graph.merge_sequential(alternatives_graph)
+        elif node.f_else_stmts:
+            else_graph: PDGGraph = self.build_pdg(control_node, 'F', node.f_else_stmts)
+            if not else_graph.is_empty():
+                empty_else_graph.merge_sequential(else_graph)
+        graph.merge_branches([empty_then_graph, empty_else_graph])
         self.__context.remove_scope()
         return graph
 
@@ -1109,7 +1448,8 @@ class PDGGraph:
                 graph.merge_sequential_data(data_node, Type.DEFINITION)
             elif definitions[0].is_dummy():
                 for definition in definitions:
-                    del self.__definition_store[definition._key]
+                    if definition.get_key() in self.__definition_store:
+                        del self.__definition_store[definition.get_key()]
                     definition.copy_data(data_node)
                     ns: set[PDGDataNode] = self.__definition_store.get(definition._key, None)
                     if ns is None:
@@ -1134,17 +1474,30 @@ class PDGGraph:
         raise NotImplementedError
 
     @multimethod
-    def build_pdg(self, control: PDGNode, branch: str, node: ParamAssoc):
+    def build_pdg(self, control: PDGNode, branch: str, node: OthersDesignator) -> PDGGraph:
+        return PDGGraph(
+            self.__context,
+            PDGDataNode(
+                node,
+                node_type(node),
+                node.text,
+                None,  # correct type?
+                node.text
+            )
+        )
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: ParamAssoc) -> PDGGraph:
         if node.f_designator:
             warn('WARNING: ParamAssoc f_designator is not implemented!')
         return self.build_pdg(control, branch, node.f_r_expr)
 
     @multimethod
-    def build_pdg(self, control: PDGNode, branch: str, node: ParenExpr):
+    def build_pdg(self, control: PDGNode, branch: str, node: ParenExpr) -> PDGGraph:
         return self.build_pdg(control, branch, node.f_expr)
 
     @multimethod
-    def build_pdg(self, control: PDGNode, branch: str, node: RealLiteral):
+    def build_pdg(self, control: PDGNode, branch: str, node: RealLiteral) -> PDGGraph:
         return PDGGraph(self.__context,
                         PDGDataNode(
                             node,
@@ -1153,6 +1506,26 @@ class PDGGraph:
                             'Real',
                             node.text
                         ))
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: ReturnStmt) -> PDGGraph:
+        graph: Optional[PDGGraph] = None
+        action_node: Optional[PDGActionNode] = None
+        if node.f_return_expr:
+            graph = self.build_argument_pdg(control, branch, node.f_return_expr)
+            action_node = PDGActionNode(
+                control, branch, node, node_type(node), None, None, 'return'
+            )
+            graph.merge_sequential_data(action_node, Type.PARAMETER)
+        else:
+            action_node = PDGActionNode(
+                control, branch, node, node_type(node), None, None, 'return'
+            )
+            graph = PDGGraph(self.__context, action_node)
+        graph._returns.add(action_node)
+        graph._sinks.clear()
+        graph._statement_sinks.clear()
+        return graph
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: StmtList) -> PDGGraph:
@@ -1215,7 +1588,7 @@ class PDGGraph:
             self._sinks.update(pdg._sinks)
             self._statement_sinks.update(pdg._statement_sinks)
             for source in pdg._data_sources.copy():  # why do we need a copy?
-                definitions: set[PDGDataNode] = self.__definition_store.get(source._key)
+                definitions: set[PDGDataNode] = self.__definition_store.get(source.get_key())
                 if definitions is not None:
                     for definition in definitions:
                         if definition is not None:
@@ -1315,9 +1688,9 @@ class PDGGraph:
         if returns:
             dummy: PDGDataNode = PDGDataNode(None,
                                              node_type(Identifier),
-                                             PDGNode._PREFIX_DUMMY + str(start_position(exp)) + '_' + str(start_position(exp) + len(exp.text)),
+                                             PDGNode.PREFIX_DUMMY + str(start_position(exp)) + '_' + str(start_position(exp) + len(exp.text)),
                                              returns[0].get_data_type(),
-                                             PDGNode._PREFIX_DUMMY, False, True)
+                                             PDGNode.PREFIX_DUMMY, False, True)
             for ret in returns:
                 ret.set_ast_node_type(node_type(AssignStmt))
                 ret._name = ':='
@@ -1335,9 +1708,9 @@ class PDGGraph:
         dummy: PDGDataNode = PDGDataNode(
             None,
             node_type(Identifier),
-            PDGNode._PREFIX_DUMMY + str(start_position(exp)) + '_' + str(start_position(exp) + len(exp.text)),
+            PDGNode.PREFIX_DUMMY + str(start_position(exp)) + '_' + str(start_position(exp) + len(exp.text)),
             node.get_data_type(),
-            PDGNode._PREFIX_DUMMY,
+            PDGNode.PREFIX_DUMMY,
             False,
             True
         )
@@ -1449,11 +1822,11 @@ class PDGGraph:
         if type == Type.DEFINITION:
             s: set[PDGDataNode] = set()
             s.add(cast(PDGDataNode, next))
-            self.__definition_store[next._key] = s
+            self.__definition_store[next.get_key()] = s
         elif type == Type.QUALIFIER:
             self._data_sources.add(cast(PDGDataNode, next))
         elif type != Type.REFERENCE and isinstance(next, PDGDataNode):
-            s: set[PDGDataNode] = self.__definition_store.get(next._key, None)
+            s: set[PDGDataNode] = self.__definition_store.get(next.get_key(), None)
             if s is not None:
                 for definition in s:
                     PDGDataEdge(definition, next, Type.REFERENCE)
@@ -1474,7 +1847,7 @@ class PDGGraph:
     def extend(self, ret: PDGNode, node: PDGDataNode, type: Type):
         s: set[PDGDataNode] = set()
         s.add(node)
-        self.__definition_store[node._key] = s
+        self.__definition_store[node.get_key()] = s
         self._nodes.add(node)
         self._sinks.remove(ret)
         self._sinks.add(node)
@@ -1497,7 +1870,7 @@ class PDGGraph:
 
     def adjust_break_nodes(self, id: Optional[str]):
         for node in self._breaks.copy():
-            if (node._key is None and id is None) or node._key == id:
+            if (node.get_key() is None and id is None) or node.get_key() == id:
                 self._sinks.add(node)
                 self._statement_sinks.add(node)
                 self._breaks.remove(node)
@@ -1580,7 +1953,7 @@ class PDGGraph:
                         branch_nodes.get(edge.get_label()).append(edge.get_target())
                 for branch in branch_nodes.keys():
                     nodes: list[PDGNode] = branch_nodes.get(branch)
-                    for i in range(0, len(nodes)): # TODO: this could be implemented with slices
+                    for i in range(0, len(nodes)):  # TODO: this could be implemented with slices
                         n: PDGNode = nodes[i]
                         pre_nodes: list[PDGNode] = []
                         for j in range(0, i):
