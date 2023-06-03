@@ -13,6 +13,8 @@ def main():
     treed_mapper.map(False)
     treed_mapper.print_changes()
     print('Number of changed AST nodes: {}'.format(treed_mapper.get_number_of_changes()))
+    print('Number of unmaps: {}'.format(treed_mapper.get_number_of_unmaps()))
+    print('Number of non name unmaps: {}'.format(treed_mapper.get_number_of_non_name_unmaps()))
 
 
 if __name__ == '__main__':
