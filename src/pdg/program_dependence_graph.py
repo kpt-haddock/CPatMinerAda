@@ -1356,7 +1356,7 @@ class PDGGraph:
             )
         )
 
-        if node.f_alternatives:
+        if len(node.f_alternatives):
             alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F',
                                                           list(node.f_alternatives), node.f_else_stmts)
             if not alternatives_graph.is_empty():
