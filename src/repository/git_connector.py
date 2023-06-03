@@ -34,9 +34,6 @@ class GitConnector:
     def connect(self) -> bool:
         self.__repository = Repo(self.__url)
 
-    def close(self):
-        raise NotImplementedError('close not implemented')
-
     def log(self) -> Iterator[Commit]:
         return self.__repository.iter_commits()
 
