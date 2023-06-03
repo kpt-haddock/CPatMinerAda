@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from builtins import NotImplementedError
 from collections import deque
 from enum import Enum
 from typing import Optional, cast
@@ -8,15 +9,17 @@ from warnings import warn
 
 import libadalang
 from git import Commit, DiffIndex
-from libadalang import AdaNode, Expr, ObjectDecl, AnalysisContext, AnalysisUnit
+from libadalang import AdaNode, Expr, ObjectDecl, AnalysisContext, AnalysisUnit, PackageBody, SubpBody, SubpKindFunction
 from multimethod import multimethod
 from overrides import override
 
+from src.change.vector_visitor import VectorVisitor
 from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext
 from src.repository.git_connector import GitConnector
 from src.treed.treed import TreedMapper
 from src.utils import Config, string_processor
 from src.utils.ada_node_matcher import match
+from src.utils.ada_node_visitor import accept
 from src.utils.file_io import FileIO
 from src.utils.pair import Pair
 
@@ -36,6 +39,10 @@ class ChangeNode:
     out_edges: list[ChangeEdge]
 
     def __init__(self, node: PDGNode):
+        self.starts = []
+        self.lengths = []
+        self.in_edges = []
+        self.out_edges = []
         self.ast_node_type = node.get_ast_node_type()
         self.version = node.version
         if node.get_ast_node() is not None:
@@ -180,9 +187,6 @@ class ChangeAnalyzer:
         self.__git_connector = GitConnector(self.__url + '/.git')
         self.__git_connector.connect()
 
-    def close_git_connector(self):
-        self.__git_connector.close()
-
     @multimethod
     def build_log_entries(self):
         # Not Implemented.
@@ -208,7 +212,18 @@ class ChangeAnalyzer:
     def analyze_git(self):
         self.__change_project = ChangeProject(self.__project_id, self.__project_name)
         self.__change_project.revisions = []
-        self.__analyze_git(self.__git_connector.get_commit('HEAD'))
+        dir: str = 'C:/CPatMinerAda/out' + '/' + self.__project_name
+        # self.__analyze_git(self.__git_connector.get_commit('HEAD'))
+
+        commits = self.__git_connector.log()
+
+        self.__number_of_code_revisions = 0
+        self.__number_of_revisions = 0
+        self.__number_of_extracted_revisions = 0
+
+        for commit in commits:
+            #  TODO: check if  dir/ commit name .dat exists
+            self.__analyze_git(commit)
 
     def __analyze_git(self, commit: Commit):
         self.__number_of_revisions += 1
@@ -229,7 +244,7 @@ class ChangeAnalyzer:
                     if cgs is None:
                         cgs = dict()
                         change_graphs[e.get_change_file().get_path()] = cgs
-                    cgs['{},{},{},'.format(e.get_change_class().get_name(), e.get_simple_name(),
+                    cgs['{},{},{},'.format(e.get_change_package().get_name(), e.get_simple_name(),
                                            e.get_parameter_types(), e._start_line)] = change_graph
                 e.clean_for_stats()
             if len(change_graphs) > 0:
@@ -249,34 +264,57 @@ class RevisionAnalyzer:
     __revision: int
     __commit: Commit
 
-    __mapped_files_m: set[ChangeFile] = set()
-    __mapped_files_n: set[ChangeFile] = set()
-    __classes_m: set[ChangeClass] = set()
-    __classes_n: set[ChangeClass] = set()
-    __mapped_classes_m: set[ChangeClass] = set()
-    __mapped_classes_n: set[ChangeClass] = set()
-    __methods_m: set[ChangeMethod] = set()
-    __methods_n: set[ChangeMethod] = set()
-    __mapped_methods_m: set[ChangeMethod] = set()
-    __mapped_methods_n: set[ChangeMethod] = set()
-    __fields_m: set[ChangeField] = set()
-    __fields_n: set[ChangeField] = set()
-    __mapped_fields_m: set[ChangeField] = set()
-    __mapped_fields_n: set[ChangeField] = set()
-    __inits_m: set[ChangeInitializer] = set()
-    __inits_n: set[ChangeInitializer] = set()
-    __mapped_inits_m: set[ChangeInitializer] = set()
-    __mapped_inits_n: set[ChangeInitializer] = set()
+    __mapped_files_m: set[ChangeFile]
+    __mapped_files_n: set[ChangeFile]
+    __packages_m: set[ChangePackage]
+    __packages_n: set[ChangePackage]
+    __mapped_packages_m: set[ChangePackage]
+    __mapped_packages_n: set[ChangePackage]
+    __methods_m: set[ChangeMethod]
+    __methods_n: set[ChangeMethod]
+    __mapped_methods_m: set[ChangeMethod]
+    __mapped_methods_n: set[ChangeMethod]
+    __fields_m: set[ChangeField]
+    __fields_n: set[ChangeField]
+    __mapped_fields_m: set[ChangeField]
+    __mapped_fields_n: set[ChangeField]
+    __inits_m: set[ChangeInitializer]
+    __inits_n: set[ChangeInitializer]
+    __mapped_inits_m: set[ChangeInitializer]
+    __mapped_inits_n: set[ChangeInitializer]
 
     change_revision: ChangeRevision
 
     @multimethod
+    def __init__(self):
+        self.__mapped_files_m = set()
+        self.__mapped_files_n = set()
+        self.__packages_m = set()
+        self.__packages_n = set()
+        self.__mapped_packages_m = set()
+        self.__mapped_packages_n = set()
+        self.__methods_m = set()
+        self.__methods_n = set()
+        self.__mapped_methods_m = set()
+        self.__mapped_methods_n = set()
+        self.__fields_m = set()
+        self.__fields_n = set()
+        self.__mapped_fields_m = set()
+        self.__mapped_fields_n = set()
+        self.__inits_m = set()
+        self.__inits_n = set()
+        self.__mapped_inits_m = set()
+        self.__mapped_inits_n = set()
+
+    @multimethod
     def __init__(self, change_analyzer: ChangeAnalyzer, revision: int):
+        self.__init__()
         self.__change_analyzer = change_analyzer
         self.__revision = revision
 
     @multimethod
     def __init__(self, change_analyzer: ChangeAnalyzer, commit: Commit):
+        self.__init__()
         self.__change_analyzer = change_analyzer
         self.__commit = commit
         self.__revision = commit.committed_datetime  # TODO
@@ -293,11 +331,11 @@ class RevisionAnalyzer:
     def get_mapped_files_n(self) -> set[ChangeFile]:
         return self.__mapped_files_n
 
-    def get_mapped_classes_m(self) -> set[ChangeClass]:
-        return self.__mapped_classes_m
+    def get_mapped_packages_m(self) -> set[ChangePackage]:
+        return self.__mapped_packages_m
 
-    def get_mapped_classes_n(self) -> set[ChangeClass]:
-        return self.__mapped_classes_n
+    def get_mapped_packages_n(self) -> set[ChangePackage]:
+        return self.__mapped_packages_n
 
     def get_mapped_methods_m(self) -> set[ChangeMethod]:
         return self.__mapped_methods_m
@@ -321,17 +359,12 @@ class RevisionAnalyzer:
         raise NotImplementedError('Not implementing SVN methods!')
 
     def analyze_git(self) -> bool:
-        print(1)
         if not self.__build_git_modified_files():
-            print(2)
             return False
         if Config.count_change_file_only:
-            print(3)
             return True
         if not self.__map():
-            print(4)
             return False
-        print(5)
         self.__derive_changes()
         if len(self.__mapped_methods_m) > 100:
             return False
@@ -384,92 +417,97 @@ class RevisionAnalyzer:
         return True
 
     def __map(self) -> bool:
-        self.__map_classes()
+        self.__map_packages()
         self.__map_methods()
         return True
 
-    def __map_classes(self):
+    def __map_bodies(self):
+        for file_m in self.__mapped_files_m:
+            file_n: ChangeFile = file_m.get_mapped_file()
+            file_m.compute_similarity(file_n)  # <--- TODO
+
+    def __map_packages(self):
         for file_m in self.__mapped_files_m:
             file_n: ChangeFile = file_m.get_mapped_file()
             file_m.compute_similarity(file_n)
-            for change_class in file_m.get_classes():
-                if change_class.get_mapped_class() is not None:
-                    self.__mapped_classes_m.add(change_class)
-                    self.__mapped_classes_n.add(change_class.get_mapped_class())
-                    stack_classes: deque = deque()
-                    stack_classes.append(change_class)
-                    while len(stack_classes) > 0:
-                        stack_class: ChangeClass = stack_classes.pop()
-                        stack_class.compute_similarity(stack_class.get_mapped_class(), False)
-                        for inner_change_class in stack_class.get_inner_classes(False):
-                            if inner_change_class.get_mapped_class() is not None:
-                                self.__mapped_classes_m.add(inner_change_class)
-                                self.__mapped_classes_n.add(inner_change_class.get_mapped_class())
-                                stack_classes.append(inner_change_class)
+            for change_package in file_m.get_packages():
+                if change_package.get_mapped_package() is not None:
+                    self.__mapped_packages_m.add(change_package)
+                    self.__mapped_packages_n.add(change_package.get_mapped_package())
+                    stack_packages: deque = deque()
+                    stack_packages.append(change_package)
+                    while len(stack_packages) > 0:
+                        stack_package: ChangePackage = stack_packages.pop()
+                        stack_package.compute_similarity(stack_package.get_mapped_package(), False)
+                        for inner_change_package in stack_package.get_inner_packages(False):
+                            if inner_change_package.get_mapped_package() is not None:
+                                self.__mapped_packages_m.add(inner_change_package)
+                                self.__mapped_packages_n.add(inner_change_package.get_mapped_package())
+                                stack_packages.append(inner_change_package)
                 else:
-                    self.__classes_m.add(change_class)
-            for change_class in file_n.get_classes():
-                if change_class.get_mapped_class() is not None:
-                    self.__mapped_classes_n.add(change_class)
+                    self.__packages_m.add(change_package)
+            for change_package in file_n.get_packages():
+                if change_package.get_mapped_package() is not None:
+                    self.__mapped_packages_n.add(change_package)
                 else:
-                    self.__classes_n.add(change_class)
-                for inner_change_class in change_class.get_inner_classes(True):
-                    if inner_change_class.get_mapped_class is not None:
-                        self.__mapped_classes_m.add(inner_change_class)
+                    self.__packages_n.add(change_package)
+                for inner_change_package in change_package.get_inner_packages(True):
+                    if inner_change_package.get_mapped_package is not None:
+                        self.__mapped_packages_m.add(inner_change_package)
                     else:
-                        self.__classes_n.add(inner_change_class)
-        ChangeClass.map_all(self.__classes_m, self.__classes_n, self.__mapped_classes_m, self.__mapped_classes_n)
-        self.__clear_class_body_mapping()
-        for change_class in self.__mapped_classes_m:
-            change_class.compute_similarity(change_class.get_mapped_class(), True)
-            for change_method in change_class.get_methods():
+                        self.__packages_n.add(inner_change_package)
+        ChangePackage.map_all(self.__packages_m, self.__packages_n, self.__mapped_packages_m, self.__mapped_packages_n)
+        self.__clear_package_body_mapping()
+        for change_package in self.__mapped_packages_m:
+            change_package.compute_similarity(change_package.get_mapped_package(), True)
+            for change_method in change_package.get_methods():
                 if change_method.get_mapped_method() is not None:
                     self.__mapped_methods_m.add(change_method)
                 else:
                     self.__methods_m.add(change_method)
-            for change_field in change_class.get_fields():
+            for change_field in change_package.get_fields():
                 if change_field.get_mapped_field() is not None:
                     self.__mapped_fields_m.add(change_field)
                 else:
                     self.__fields_m.add(change_field)
-            for change_initializer in change_class.get_initializers():
+            for change_initializer in change_package.get_initializers():
                 if change_initializer.get_mapped_initializer() is not None:
                     self.__mapped_inits_m.add(change_initializer)
                 else:
                     self.__inits_m.add(change_initializer)
-        for change_class in self.__mapped_classes_n:
-            for change_method in change_class.get_methods():
+        for change_package in self.__mapped_packages_n:
+            for change_method in change_package.get_methods():
                 if change_method.get_mapped_method() is not None:
                     self.__mapped_methods_n.add(change_method)
                 else:
                     self.__methods_n.add(change_method)
-            for change_field in change_class.get_fields():
+            for change_field in change_package.get_fields():
                 if change_field.get_mapped_field() is not None:
                     self.__mapped_fields_n.add(change_field)
                 else:
                     self.__fields_n.add(change_field)
-            for change_initializer in change_class.get_initializers():
+            for change_initializer in change_package.get_initializers():
                 if change_initializer.get_mapped_initializer() is not None:
                     self.__mapped_inits_n.add(change_initializer)
                 else:
                     self.__inits_n.add(change_initializer)
-        for change_class in self.__classes_m:
-            for change_method in change_class.get_methods():
+        for change_package in self.__packages_m:
+            for change_method in change_package.get_methods():
                 self.__methods_m.add(change_method)
-            for change_field in change_class.get_fields():
+            for change_field in change_package.get_fields():
                 self.__fields_m.add(change_field)
-            for change_initializer in change_class.get_initializers():
+            for change_initializer in change_package.get_initializers():
                 self.__inits_m.add(change_initializer)
 
-    def __clear_class_body_mapping(self):
-        for change_class in self.__classes_m:
-            change_class.clear_body_mapping()
-        for change_class in self.__classes_n:
-            change_class.clear_body_mapping()
-        for change_class in self.__mapped_classes_m:
-            change_class.clear_body_mapping()
-        for change_class in self.__mapped_classes_n:
-            change_class.clear_body_mapping()
+    def __clear_package_body_mapping(self):
+        for change_package in self.__packages_m:
+            change_package.clear_body_mapping()
+        for change_package in self.__packages_n:
+            change_package.clear_body_mapping()
+        for change_package in self.__mapped_packages_m:
+            change_package.clear_body_mapping()
+        for change_package in self.__mapped_packages_n:
+            change_package.clear_body_mapping()
 
     def __map_methods(self):
         ChangeMethod.map_all(self.__methods_m, self.__methods_n, self.__mapped_methods_m, self.__mapped_methods_n,
@@ -480,14 +518,13 @@ class RevisionAnalyzer:
         self.__derive_method_changes()
         #  derive_init_changes()
         #  derive_enum_constant_changes()
-        #  derive_class_changes()
+        #  derive_package_changes()
 
     def __derive_method_changes(self):
         mapped_methods_m_copy: set[ChangeMethod] = self.__mapped_methods_m.copy()
         print('__derive_method_changes')
         print(self.__mapped_methods_m)
         for change_method_m in mapped_methods_m_copy:
-            print(7)
             change_method_m.derive_changes()
             if change_method_m.get_change_type() == Type.UNCHANGED:
                 self.__mapped_methods_m.remove(change_method_m)
@@ -576,8 +613,8 @@ class ChangeEntity:
     @abstractmethod
     def get_mapped_entity(self) -> Optional[ChangeEntity]:
         return None
-        # if isinstance(self, ChangeClass):
-        #     return self.get_mapped_class()
+        # if isinstance(self, ChangePackage):
+        #     return self.get_mapped_package()
         # if isinstance(self, ChangeField):
         #     return self.get_mapped_field()
         # if isinstance(self, ChangeMethod):
@@ -589,7 +626,7 @@ class ChangeEntity:
         pass
 
     @abstractmethod
-    def get_change_class(self) -> ChangeEntity:
+    def get_change_package(self) -> ChangeEntity:
         pass
 
     def clean_for_stats(self):
@@ -601,30 +638,64 @@ class ChangeEntity:
             self._vector = None
 
 
-class ChangeClass(ChangeEntity):
+class ChangePackage(ChangeEntity):
     threshold_similarity: float = 0.75
     __change_file: ChangeFile
     __modifiers: int
     __annotation: str = ''
     __simple_name: str
-    # __declaration: TODO
+    __declaration: PackageBody
+    __parent_package: Optional[PackageBody]
 
-    __mapped_class: ChangeClass = None
-    __outer_class: ChangeClass = None
-    __inner_classes: list[ChangeClass] = []
-    __fields: list[ChangeField] = []
-    __methods: list[ChangeMethod] = []
-    __initializers: list[ChangeInitializer] = []
+    __mapped_package: ChangePackage
+    __outer_package: Optional[ChangePackage]
+    __inner_packages: list[ChangePackage]
+    __fields: list[ChangeField]
+    __methods: list[ChangeMethod]
+    __initializers: list[ChangeInitializer]
 
-    def __init__(self, change_file: ChangeFile, type, outer_class):
-        raise NotImplementedError
+    @multimethod
+    def __init__(self):
+        self.__inner_packages = []
+        self.__fields = []
+        self.__methods = []
+        self.__initializers = []
+
+    @multimethod
+    def __init__(self, change_file: ChangeFile, package: PackageBody, outer_package: Optional[ChangePackage]):
+        self.__init__()
+        self._start_line = package.sloc_range.start.line
+        self.__change_file = change_file
+        self.__outer_package = outer_package
+        self.__modifiers = 0  # TODO: remove modifiers!
+        self.__simple_name = package.f_package_name.f_name.text
+        self._declaration = package
+
+        #  TODO: parentpackage?
+        self.__parent_package = None
+
+        #  interface types doesn't seem appropriate here..
+
+        #  TODO: fields?
+
+        #  add methods:
+        methods: list[SubpBody] = list(filter(lambda n: n.is_a(SubpBody), package.f_decls.f_decls))
+        for method in methods:
+            self.__methods.append(ChangeMethod(self, method))
+
+        #  add inner packages:
+        packages: list[PackageBody] = list(filter(lambda n: n.is_a(PackageBody), package.f_decls.f_decls))
+        for package in packages:
+            self.__inner_packages.append(ChangePackage(self.__change_file, package, self))
+
+        #  TODO: initializers?
 
     @override
     def get_change_file(self) -> ChangeFile:
         return self.__change_file
 
     @override
-    def get_change_class(self) -> ChangeClass:
+    def get_change_package(self) -> ChangePackage:
         return self
 
     def get_modifiers(self) -> int:
@@ -650,17 +721,23 @@ class ChangeClass(ChangeEntity):
         raise NotImplementedError('No Usage.')
 
     @override
-    def get_mapped_entity(self) -> ChangeClass:
-        return self.get_mapped_class()
+    def get_mapped_entity(self) -> ChangePackage:
+        return self.get_mapped_package()
 
-    def get_mapped_class(self) -> ChangeClass:
-        return self.__mapped_class
+    def get_mapped_package(self) -> ChangePackage:
+        return self.__mapped_package
 
-    def set_mapped_class(self, mapped_class: ChangeClass):
-        self.__mapped_class = mapped_class
+    def set_mapped_package(self, mapped_package: ChangePackage):
+        self.__mapped_package = mapped_package
 
-    def get_inner_classes(self):
-        # TODO: change compute_similarity?
+    def get_inner_packages(self, recursive: bool) -> list[ChangePackage]:
+        packages: list[ChangePackage] = self.__inner_packages.copy()
+        if recursive:
+            for inner_change_package in self.__inner_packages:
+                packages.extend(inner_change_package.get_inner_packages(True))
+        return packages
+
+    def get_inner_methods(self, recursive: bool) -> list[ChangeMethod]:
         raise NotImplementedError
 
     def get_fields(self) -> list[ChangeField]:
@@ -675,7 +752,7 @@ class ChangeClass(ChangeEntity):
     def get_field_types(self) -> dict[str, str]:
         raise NotImplementedError('No Usage.')
 
-    def compute_similarity(self, other: ChangeClass, in_mapped: bool) -> float:
+    def compute_similarity(self, other: ChangePackage, in_mapped: bool) -> float:
         common_size: float = 0.0
         total_size: float = 0.0
         methods_m: set[ChangeMethod] = set(self.get_methods())
@@ -704,95 +781,95 @@ class ChangeClass(ChangeEntity):
         common_size += size[0]
         total_size += size[1]
 
-        # map inner classes?
-        mapped_inners_m: set[ChangeClass] = set()
-        mapped_inners_n: set[ChangeClass] = set()
-        self.map_all(self.get_inner_classes().copy(), other.get_inner_classes(), mapped_inners_m, mapped_inners_n)
+        # map inner packages?
+        mapped_inners_m: set[ChangePackage] = set()
+        mapped_inners_n: set[ChangePackage] = set()
+        self.map_all(self.get_inner_packages().copy(), other.get_inner_packages(), mapped_inners_m, mapped_inners_n)
         common_size += len(mapped_inners_m)
         total_size += len(mapped_inners_m)
 
         return common_size / total_size
 
     @staticmethod
-    def set_map(class_m: ChangeClass, class_n: ChangeClass):
-        class_m.set_mapped_class(class_n)
-        class_n.set_mapped_class(class_m)
+    def set_map(package_m: ChangePackage, package_n: ChangePackage):
+        package_m.set_mapped_package(package_n)
+        package_n.set_mapped_package(package_m)
 
     @staticmethod
-    def map(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
-            mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
-        pairs_of_methods1: dict[ChangeClass, set[Pair]] = dict()
-        pairs_of_methods2: dict[ChangeClass, set[Pair]] = dict()
+    def map(packages_m: set[ChangePackage], packages_n: set[ChangePackage],
+            mapped_packages_m: set[ChangePackage], mapped_packages_n: set[ChangePackage]):
+        pairs_of_methods1: dict[ChangePackage, set[Pair]] = dict()
+        pairs_of_methods2: dict[ChangePackage, set[Pair]] = dict()
         pairs: list[Pair] = []
-        for change_class_m in classes_m:
+        for change_package_m in packages_m:
             pairs1: set[Pair] = set()
-            for change_class_n in classes_n:
-                similarity: float = change_class_m.compute_similarity(change_class_n, False)
-                if similarity >= ChangeClass.threshold_similarity:
-                    pair: Pair = Pair(change_class_m, change_class_n, similarity)
+            for change_package_n in packages_n:
+                similarity: float = change_package_m.compute_similarity(change_package_n, False)
+                if similarity >= ChangePackage.threshold_similarity:
+                    pair: Pair = Pair(change_package_m, change_package_n, similarity)
                     pairs1.add(pair)
-                    pairs2: set[pair] = pairs_of_methods2.get(change_class_n, set())
+                    pairs2: set[pair] = pairs_of_methods2.get(change_package_n, set())
                     pairs2.add(pair)
-                    pairs_of_methods2[change_class_n] = pairs2
+                    pairs_of_methods2[change_package_n] = pairs2
                     pairs.append(pair)
-            pairs_of_methods1[change_class_m] = pairs1
+            pairs_of_methods1[change_package_m] = pairs1
         pairs.sort(reverse=True)
         while pairs:
             pair: Pair = pairs[0]
-            change_class_m: ChangeClass = cast(ChangeClass, pair.get_object1())
-            change_class_n: ChangeClass = cast(ChangeClass, pair.get_object2())
-            ChangeClass.set_map(change_class_m, change_class_n)
-            mapped_classes_m.add(change_class_m)
-            mapped_classes_n.add(change_class_n)
-            for p in pairs_of_methods1[change_class_m]:
+            change_package_m: ChangePackage = cast(ChangePackage, pair.get_object1())
+            change_package_n: ChangePackage = cast(ChangePackage, pair.get_object2())
+            ChangePackage.set_map(change_package_m, change_package_n)
+            mapped_packages_m.add(change_package_m)
+            mapped_packages_n.add(change_package_n)
+            for p in pairs_of_methods1[change_package_m]:
                 pairs.remove(p)
-            for p in pairs_of_methods2[change_class_n]:
+            for p in pairs_of_methods2[change_package_n]:
                 pairs.remove(p)
 
     @staticmethod
-    def map_all(classes_m: set[ChangeClass], classes_n: set[ChangeClass],
-                mapped_classes_m: set[ChangeClass], mapped_classes_n: set[ChangeClass]):
-        class_with_name_m: dict[str, ChangeClass] = dict()
-        class_with_name_n: dict[str, ChangeClass] = dict()
-        for change_class in classes_m:
-            class_with_name_m[change_class.get_simple_name()] = change_class
-        for change_class in classes_n:
-            class_with_name_n[change_class.get_simple_name()] = change_class
-        intersection_names: set[str] = set(class_with_name_m.keys()).intersection(set(class_with_name_n.keys()))
+    def map_all(packages_m: set[ChangePackage], packages_n: set[ChangePackage],
+                mapped_packages_m: set[ChangePackage], mapped_packages_n: set[ChangePackage]):
+        package_with_name_m: dict[str, ChangePackage] = dict()
+        package_with_name_n: dict[str, ChangePackage] = dict()
+        for change_package in packages_m:
+            package_with_name_m[change_package.get_simple_name()] = change_package
+        for change_package in packages_n:
+            package_with_name_n[change_package.get_simple_name()] = change_package
+        intersection_names: set[str] = set(package_with_name_m.keys()).intersection(set(package_with_name_n.keys()))
         for name in intersection_names:
-            change_class_m: ChangeClass = class_with_name_m[name]
-            change_class_n: ChangeClass = class_with_name_n[name]
-            ChangeClass.set_map(change_class_m, change_class_n)
-            mapped_classes_m.add(change_class_m)
-            mapped_classes_n.add(change_class_n)
-            classes_m.remove(change_class_m)
-            classes_n.remove(change_class_n)
+            change_package_m: ChangePackage = package_with_name_m[name]
+            change_package_n: ChangePackage = package_with_name_n[name]
+            ChangePackage.set_map(change_package_m, change_package_n)
+            mapped_packages_m.add(change_package_m)
+            mapped_packages_n.add(change_package_n)
+            packages_m.remove(change_package_m)
+            packages_n.remove(change_package_n)
 
-        # map other classes?
-        if classes_m and classes_n:
-            temporary_mapped_classes_m: set[ChangeClass] = set()
-            temporary_mapped_classes_n: set[ChangeClass] = set()
-            ChangeClass.map(classes_m, classes_n, temporary_mapped_classes_m, temporary_mapped_classes_n)
-            mapped_classes_m.update(temporary_mapped_classes_m)
-            mapped_classes_n.update(temporary_mapped_classes_n)
-            classes_m.difference_update(temporary_mapped_classes_m)
-            classes_n.difference_update(temporary_mapped_classes_n)
+        # map other packages?
+        if packages_m and packages_n:
+            temporary_mapped_packages_m: set[ChangePackage] = set()
+            temporary_mapped_packages_n: set[ChangePackage] = set()
+            ChangePackage.map(packages_m, packages_n, temporary_mapped_packages_m, temporary_mapped_packages_n)
+            mapped_packages_m.update(temporary_mapped_packages_m)
+            mapped_packages_n.update(temporary_mapped_packages_n)
+            packages_m.difference_update(temporary_mapped_packages_m)
+            packages_n.difference_update(temporary_mapped_packages_n)
 
     def derive_changes(self):
-        if self.__mapped_class is None:
+        if self.__mapped_package is None:
             return
-        change_class_n: ChangeClass = self.__mapped_class
-        same: bool = self.__simple_name == change_class_n.get_simple_name() \
-            and self.__modifiers == change_class_n.__modifiers \
-            and self.__annotation == change_class_n.__annotation
-        # and self.__super_class_names == change_class_n.__super_class_names
+        change_package_n: ChangePackage = self.__mapped_package
+        same: bool = self.__simple_name == change_package_n.get_simple_name() \
+                     and self.__modifiers == change_package_n.__modifiers \
+                     and self.__annotation == change_package_n.__annotation
+        # and self.__super_package_names == change_package_n.__super_package_names
         if same:
             for change_field in self.get_fields():
                 if change_field.get_change_type() != Type.UNCHANGED:
                     same = False
                     break
         if same:
-            for change_field in change_class_n.get_fields():
+            for change_field in change_package_n.get_fields():
                 if change_field.get_change_type() != Type.UNCHANGED:
                     same = False
                     break
@@ -802,7 +879,7 @@ class ChangeClass(ChangeEntity):
                     same = False
                     break
         if same:
-            for change_method in change_class_n.get_methods():
+            for change_method in change_package_n.get_methods():
                 if change_method.get_change_type() != Type.UNCHANGED:
                     same = False
                     break
@@ -812,14 +889,14 @@ class ChangeClass(ChangeEntity):
                     same = False
                     break
         if same:
-            for change_initializer in change_class_n.get_initializers():
+            for change_initializer in change_package_n.get_initializers():
                 if change_initializer.get_change_type() != Type.UNCHANGED:
                     same = False
                     break
-        # TODO: inner_classes? skipped for now.
+        # TODO: inner_packages? skipped for now.
         if not same:
             self.set_change_type(Type.MODIFIED)
-            change_class_n.set_change_type(Type.MODIFIED)
+            change_package_n.set_change_type(Type.MODIFIED)
 
     @multimethod
     def print_changes(self, stream):
@@ -847,9 +924,9 @@ class ChangeClass(ChangeEntity):
 class ChangeField(ChangeEntity):
     __threshold_similarity: float = 0.75
 
-    # __change_class: ChangeClass
+    __change_package: ChangePackage
     __modifiers: int
-    __string_modifiers: set[str] = set()
+    __string_modifiers: set[str]
     __annotation: str = ''
     __name: str
     __type: str
@@ -857,11 +934,13 @@ class ChangeField(ChangeEntity):
     __mapped_field: ChangeField
     __types: set[str]
     __fields: set[str]
-    __literals: set[str] = []
+    __literals: set[str]
 
-    def __init__(self, change_class: ChangeClass, field, type: str, object_declaration: ObjectDecl):
+    def __init__(self, change_package: ChangePackage, field, type: str, object_declaration: ObjectDecl):
+        self.__string_modifiers = set()
+        self.__literals = set()
         self._start_line = object_declaration.sloc_range.start.line
-        self.__change_class = change_class
+        self.__change_package = change_package
         self._compute_vector_length()
         # TODO: implement
         raise NotImplementedError
@@ -881,10 +960,10 @@ class ChangeField(ChangeEntity):
 
     @override
     def get_qualifier_name(self) -> str:
-        return self.__change_class.get_simple_name() + '.' + self.__name
+        return self.__change_package.get_simple_name() + '.' + self.__name
 
     def get_full_qualifier_name(self) -> str:
-        return self.get_change_class().get_full_qualifier_name() + '.' + self.__name
+        return self.get_change_package().get_full_qualifier_name() + '.' + self.__name
 
     def get_type(self) -> str:
         return self.__type
@@ -909,11 +988,11 @@ class ChangeField(ChangeEntity):
 
     @override
     def get_change_file(self) -> ChangeFile:
-        return self.__change_class.get_change_file()
+        return self.__change_package.get_change_file()
 
     @override
-    def get_change_class(self) -> ChangeClass:
-        return self.__change_class
+    def get_change_package(self) -> ChangePackage:
+        return self.__change_package
 
     @override
     def get_mapped_entity(self) -> Optional[ChangeEntity]:
@@ -1037,7 +1116,8 @@ class ChangeFile(ChangeEntity):
     __compilation_unit = None  # TODO
     __context: AnalysisContext = None
     __unit: AnalysisUnit = None
-    __classes: set[ChangeClass] = set()
+    __packages: set[ChangePackage] = set()
+    main_procedure: Optional[ChangeMethod]
 
     def __init__(self, revision_analyzer: RevisionAnalyzer, path: str, content: str):
         self._start_line = 0
@@ -1045,8 +1125,18 @@ class ChangeFile(ChangeEntity):
         self.__path = path
         self.__simple_name = FileIO.get_simple_file_name(path)
         self.__context = AnalysisContext()
-        self.__unit = self.__context.get_from_file(path)
-
+        self.__unit = self.__context.get_from_buffer(path, content)
+        self.main_procedure = None
+        if self.__unit.root:
+            vector_visitor: VectorVisitor = VectorVisitor()
+            accept(self.__unit.root, vector_visitor)
+            package_body: Optional[PackageBody] = self.__unit.root.find(lambda n: n.is_a(PackageBody))
+            if package_body:
+                self.__packages.add(ChangePackage(self, package_body, None))
+            else:
+                main_procedure: Optional[SubpBody] = self.__unit.root.find(lambda n: n.is_a(SubpBody))
+                if main_procedure:
+                    self.main_procedure: ChangeMethod = ChangeMethod(self, main_procedure)
 
     def get_revision_analyzer(self) -> RevisionAnalyzer:
         return self.__revision_analyzer
@@ -1061,8 +1151,8 @@ class ChangeFile(ChangeEntity):
     def get_name(self) -> str:
         return self.get_simple_name()
 
-    def get_classes(self) -> set[ChangeClass]:
-        return self.__classes
+    def get_packages(self) -> set[ChangePackage]:
+        return self.__packages
 
     def get_mapped_file(self) -> ChangeFile:
         return self.__mapped_file
@@ -1075,39 +1165,39 @@ class ChangeFile(ChangeEntity):
         return self
 
     # @override
-    def get_change_class(self) -> ChangeClass:
+    def get_change_package(self) -> ChangePackage:
         return None
 
     def compute_similarity(self, other: ChangeFile):
-        classes_m: set[ChangeClass] = self.get_classes()
-        classes_n: set[ChangeClass] = other.get_classes()
-        mapped_classes_m: set[ChangeClass] = set()
-        mapped_classes_n: set[ChangeClass] = set()
+        packages_m: set[ChangePackage] = self.get_packages()
+        packages_n: set[ChangePackage] = other.get_packages()
+        mapped_packages_m: set[ChangePackage] = set()
+        mapped_packages_n: set[ChangePackage] = set()
 
-        class_m: Optional[ChangeClass] = None
-        class_n: Optional[ChangeClass] = None
-        for change_class in classes_m:
-            if change_class.get_simple_name() == self.get_simple_name():
-                class_m = change_class
-        for change_class in classes_n:
-            if change_class.get_simple_name() == other.get_simple_name():
-                class_n = change_class
-        if class_m is not None and class_n is not None:
-            similarity: float = class_m.compute_similarity(class_n, False)
-            if similarity > ChangeClass.threshold_similarity:
-                ChangeClass.set_map(class_m, class_n)
-                mapped_classes_m.add(class_m)
-                mapped_classes_n.add(class_n)
-                classes_m.remove(class_m)
-                classes_n.remove(class_n)
-        ChangeClass.map_all(classes_m, classes_n, mapped_classes_m, mapped_classes_n)
+        package_m: Optional[ChangePackage] = None
+        package_n: Optional[ChangePackage] = None
+        for change_package in packages_m:
+            if change_package.get_simple_name() == self.get_simple_name():
+                package_m = change_package
+        for change_package in packages_n:
+            if change_package.get_simple_name() == other.get_simple_name():
+                package_n = change_package
+        if package_m is not None and package_n is not None:
+            similarity: float = package_m.compute_similarity(package_n, False)
+            if similarity > ChangePackage.threshold_similarity:
+                ChangePackage.set_map(package_m, package_n)
+                mapped_packages_m.add(package_m)
+                mapped_packages_n.add(package_n)
+                packages_m.remove(package_m)
+                packages_n.remove(package_n)
+        ChangePackage.map_all(packages_m, packages_n, mapped_packages_m, mapped_packages_n)
 
     @multimethod
     def print_changes(self, ps):
         raise NotImplementedError
 
     @multimethod
-    def print_changes(self, ps, classes):
+    def print_changes(self, ps, packages):
         raise NotImplementedError
 
     @override
@@ -1169,22 +1259,47 @@ class ChangeMethod(ChangeEntity):
     __threshold_body_similarity: float = 0.75
     __maximum_number_of_statements: int = 1000
 
-    __change_class: Optional[ChangeClass]
+    __change_package: Optional[ChangePackage]
     __modifiers: int
     __annotation: Optional[str] = ''
     __name: str
     __simple_name: str
     __number_of_parameters: int
-    __return_type: str
+    __return_type: Optional[str]
     __declaration: libadalang.SubpBody
     __mapped_method: Optional[ChangeMethod] = None
     __parameter_types: str
     __types: Optional[set[str]]
     __fields: Optional[set[str]]
-    __literals: Optional[set[str]] = set()
-    __local_var_locs: dict[libadalang.Identifier, set[libadalang.Identifier]] = dict()
+    __literals: Optional[set[str]]
+    __local_var_locs: dict[libadalang.Identifier, set[libadalang.Identifier]] = dict()  # TODO: probably unused?
 
-    def __init__(self, change_class: ChangeClass, method: None):
+    @multimethod
+    def __init__(self):
+        self.__literals = set()
+
+    @multimethod
+    def __init__(self, change_file: ChangeFile, method: SubpBody):
+        self.__init__()
+        self._start_line = method.sloc_range.start.line
+        self._change_file = change_file
+        self.__simple_name = method.f_subp_spec.f_subp_name.f_name.text
+        self.__number_of_parameters = len(method.f_subp_spec.p_params)
+        self.__name = '{}({})'.format(self.__simple_name, self.__number_of_parameters)
+        self.__declaration = method
+        self.__parameter_types = self.__separator_parameter
+        for parameter in method.f_subp_spec.p_params:
+            print(parameter)
+            raise NotImplementedError
+        if method.f_subp_spec.f_subp_kind.is_a(SubpKindFunction):
+            self.__return_type = method.f_subp_spec.f_subp_returns.text
+        self._vector = VectorVisitor.property_vector[method].copy()
+        VectorVisitor.property_vector[method] = None
+        self._compute_vector_length()
+
+    @multimethod
+    def __init__(self, change_package: ChangePackage, method: SubpBody):
+        self.__init__()
         raise NotImplementedError
 
     def get_modifiers(self) -> int:
@@ -1202,7 +1317,7 @@ class ChangeMethod(ChangeEntity):
 
     @override
     def get_qualifier_name(self) -> str:
-        return self.__change_class.get_simple_name() + '.' + self.__name
+        return self.__change_package.get_simple_name() + '.' + self.__name
 
     def get_number_of_parameters(self) -> int:
         return self.__number_of_parameters
@@ -1234,11 +1349,11 @@ class ChangeMethod(ChangeEntity):
 
     @override
     def get_change_file(self) -> ChangeFile:
-        return self.__change_class.get_change_file()
+        return self.__change_package.get_change_file()
 
     @override
-    def get_change_class(self) -> ChangeClass:
-        return self.__change_class
+    def get_change_package(self) -> ChangePackage:
+        return self.__change_package
 
     def get_local_var_locs(self) -> dict[libadalang.Identifier, set[libadalang.Identifier]]:
         return self.__local_var_locs
@@ -1253,15 +1368,15 @@ class ChangeMethod(ChangeEntity):
             methods_n: set[ChangeMethod],
             mapped_methods_m: set[ChangeMethod],
             mapped_methods_n: set[ChangeMethod],
-            in_mapped_classes: bool):
+            in_mapped_packages: bool):
         pairs_of_methods1: dict[ChangeMethod, set[Pair]] = dict()
         pairs_of_methods2: dict[ChangeMethod, set[Pair]] = dict()
         pairs: list[Pair] = []
         for change_method_m in methods_m:
             pairs1: set[Pair] = set()
             for change_method_n in methods_n:
-                similarity: list[float] = change_method_m.compute_similarity(change_method_n, in_mapped_classes)
-                is_mapped: bool = (in_mapped_classes
+                similarity: list[float] = change_method_m.compute_similarity(change_method_n, in_mapped_packages)
+                is_mapped: bool = (in_mapped_packages
                                    and similarity[0] >= ChangeMethod.__threshold_signature_similarity) \
                                   or (similarity[0] > 0 and similarity[1] == 1.0) \
                                   or (similarity[0] >= ChangeMethod.__threshold_signature_similarity
@@ -1293,9 +1408,9 @@ class ChangeMethod(ChangeEntity):
         for key in self._vector.keys():
             self._vector_length += self._vector.get(key)
 
-    def compute_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
+    def compute_similarity(self, other: ChangeMethod, in_mapped_packages: bool):
         similarity: list[float] = [0.0, 0.0, 0.0, 0.0]
-        signature: float = self.compute_name_similarity(other, in_mapped_classes)
+        signature: float = self.compute_name_similarity(other, in_mapped_packages)
         body: float = 1.0
         if len(self._vector) > 0 or len(other._get_vector()) > 0:
             body = self.compute_vector_similarity(other)
@@ -1306,7 +1421,7 @@ class ChangeMethod(ChangeEntity):
 
         return similarity
 
-    def compute_name_similarity(self, other: ChangeMethod, in_mapped_classes: bool):
+    def compute_name_similarity(self, other: ChangeMethod, in_mapped_packages: bool):
         signature: float = 0.0
         full_name1: str = self.get_full_name()
         full_name2: str = other.get_full_name()
@@ -1319,7 +1434,7 @@ class ChangeMethod(ChangeEntity):
                 methods_n: set[ChangeMethod],
                 mapped_methods_m: set[ChangeMethod],
                 mapped_methods_n: set[ChangeMethod],
-                in_mapped_classes: bool) -> list[float]:
+                in_mapped_packages: bool) -> list[float]:
         size: list[float] = \
             [0, (len(methods_m) + len(methods_n) + len(mapped_methods_m) + len(mapped_methods_n)) / 2.0]
         #  map methods with same simple names and numbers of parameters
@@ -1347,7 +1462,7 @@ class ChangeMethod(ChangeEntity):
                              methods_with_name_n.get(name),
                              temporary_mapped_methods_m,
                              temporary_mapped_methods_n,
-                             in_mapped_classes)
+                             in_mapped_packages)
             mapped_methods_m.update(temporary_mapped_methods_m)
             mapped_methods_n.update(temporary_mapped_methods_n)
             methods_m -= temporary_mapped_methods_m
@@ -1359,8 +1474,8 @@ class ChangeMethod(ChangeEntity):
         methods_with_name_n.clear()
         for change_method in methods_m:
             name: str = change_method.get_simple_name()
-            if name == change_method.get_change_class().get_simple_name():
-                name = 'class'
+            if name == change_method.get_change_package().get_simple_name():
+                name = 'class'  # TODO
             change_method_set: set[ChangeMethod] = methods_with_name_m.get(name, None)
             if change_method_set is None:
                 change_method_set = set()
@@ -1368,8 +1483,8 @@ class ChangeMethod(ChangeEntity):
             methods_with_name_m[name] = change_method_set
         for change_method in methods_n:
             name: str = change_method.get_simple_name()
-            if name == change_method.get_change_class().get_simple_name():
-                name = 'class'
+            if name == change_method.get_change_package().get_simple_name():
+                name = 'class'  # TODO
             change_method_set: set[ChangeMethod] = methods_with_name_n.get(name, None)
             if change_method_set is None:
                 change_method_set = set()
@@ -1383,7 +1498,7 @@ class ChangeMethod(ChangeEntity):
                              methods_with_name_n.get(name),
                              temporary_mapped_methods_m,
                              temporary_mapped_methods_n,
-                             in_mapped_classes)
+                             in_mapped_packages)
             mapped_methods_m.update(temporary_mapped_methods_m)
             mapped_methods_n.update(temporary_mapped_methods_n)
             methods_m -= temporary_mapped_methods_m
@@ -1396,7 +1511,7 @@ class ChangeMethod(ChangeEntity):
                          methods_n,
                          temporary_mapped_methods_m,
                          temporary_mapped_methods_n,
-                         in_mapped_classes)
+                         in_mapped_packages)
         mapped_methods_m.update(temporary_mapped_methods_m)
         mapped_methods_n.update(temporary_mapped_methods_n)
         methods_m -= temporary_mapped_methods_m
@@ -1419,7 +1534,7 @@ class ChangeMethod(ChangeEntity):
     def clean_for_stats(self):
         super().clean_for_stats()
         self.__annotation = None
-        self.__change_class = None
+        self.__change_package = None
         self.__declaration = None
         if self.__fields is not None:
             self.__fields.clear()
@@ -1446,7 +1561,6 @@ class ChangeMethod(ChangeEntity):
         return self.get_qualifier_name()
 
     def get_change_graph(self, repository, commit):
-        # TODO
         pdg1: PDGGraph = PDGGraph(self.__declaration,
                                   PDGBuildingContext(repository, commit, self.get_change_file().get_path(), False))
         pdg1.build_change_graph(0)
