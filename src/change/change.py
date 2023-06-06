@@ -9,7 +9,7 @@ from warnings import warn
 
 import libadalang
 from git import Commit, DiffIndex
-from libadalang import AdaNode, Expr, ObjectDecl, AnalysisContext, AnalysisUnit, PackageBody, SubpBody, SubpKindFunction
+from libadalang import *
 from multimethod import multimethod
 from overrides import override
 
@@ -18,10 +18,12 @@ from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext
 from src.repository.git_connector import GitConnector
 from src.treed.treed import TreedMapper
 from src.utils import Config, string_processor
+from src.utils.ada_ast_util import node_type
 from src.utils.ada_node_matcher import match
 from src.utils.ada_node_visitor import accept
 from src.utils.file_io import FileIO
 from src.utils.pair import Pair
+from src.utils.string_processor import serialize, do_lcs
 
 
 class ChangeNode:
@@ -239,8 +241,8 @@ class ChangeAnalyzer:
                 change_graph: ChangeGraph = e.get_change_graph(self.__git_connector.get_repository(), commit)
                 change_sizes: list[int] = change_graph.get_change_sizes()
                 if 100 >= change_sizes[0] > 0 and 100 >= change_sizes[1] > 0 and change_sizes[0] + change_sizes[
-                    1] >= 3 and change_graph.has_methods():
-                    cgs: dict[str, ChangeGraph] = change_graphs[e.get_change_file().get_path()]
+                    1] >= 3:  # and change_graph.has_methods():
+                    cgs: Optional[dict[str, ChangeGraph]] = change_graphs.get(e.get_change_file().get_path())
                     if cgs is None:
                         cgs = dict()
                         change_graphs[e.get_change_file().get_path()] = cgs
@@ -544,18 +546,28 @@ class Type(Enum):
 class ChangeEntity:
     _threshold_distance: int = 20
 
-    _start_line: int = -1
+    _start_line: int
     __change_type: Type = Type.UNCHANGED
     _vector: Optional[dict[int, int]]
-    _vector_length: int = 0
-    _tree: Optional[dict[AdaNode, list[AdaNode]]]
+    _vector_length: int
 
-    number_of_locs: int = 0
-    number_of_non_comment_locs: int = 0
-    number_of_ast_nodes: int = 0
-    number_of_change_locs: int = 0
-    number_of_change_ast_nodes: int = 0
-    number_of_change_trees: int = 0
+    number_of_locs: int
+    number_of_non_comment_locs: int
+    number_of_ast_nodes: int
+    number_of_change_locs: int
+    number_of_change_ast_nodes: int
+    number_of_change_trees: int
+
+    def __init__(self):
+        self._start_line = -1
+        self.__change_type = Type.UNCHANGED
+        self._vector_length = 0
+        self.number_of_locs = 0
+        self.number_of_non_comment_locs = 0
+        self.number_of_ast_nodes = 0
+        self.number_of_change_locs = 0
+        self.number_of_change_ast_nodes = 0
+        self.number_of_change_trees = 0
 
     def get_change_type(self) -> Type:
         return self.__change_type
@@ -630,9 +642,6 @@ class ChangeEntity:
         pass
 
     def clean_for_stats(self):
-        if self._tree is not None:
-            self._tree.clear()
-            self._tree = None
         if self._vector is not None:
             self._vector.clear()
             self._vector = None
@@ -656,6 +665,7 @@ class ChangePackage(ChangeEntity):
 
     @multimethod
     def __init__(self):
+        super().__init__()
         self.__inner_packages = []
         self.__fields = []
         self.__methods = []
@@ -777,14 +787,19 @@ class ChangePackage(ChangeEntity):
         common_size += size[0]
         total_size += size[1]
 
-        size = ChangeInitializer.map_all(initializers_m, initializers_n, mapped_initializers_m, mapped_initializers_n)
-        common_size += size[0]
-        total_size += size[1]
+        # temp solution:
+        if initializers_m:
+            size = ChangeInitializer.map_all(initializers_m, initializers_n, mapped_initializers_m, mapped_initializers_n)
+            common_size += size[0]
+            total_size += size[1]
+        else:
+            common_size += 1.0
+            total_size += 1.0
 
         # map inner packages?
         mapped_inners_m: set[ChangePackage] = set()
         mapped_inners_n: set[ChangePackage] = set()
-        self.map_all(self.get_inner_packages().copy(), other.get_inner_packages(), mapped_inners_m, mapped_inners_n)
+        self.map_all(set(self.__inner_packages), set(other.get_inner_packages(False)), mapped_inners_m, mapped_inners_n)
         common_size += len(mapped_inners_m)
         total_size += len(mapped_inners_m)
 
@@ -822,9 +837,11 @@ class ChangePackage(ChangeEntity):
             mapped_packages_m.add(change_package_m)
             mapped_packages_n.add(change_package_n)
             for p in pairs_of_methods1[change_package_m]:
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
             for p in pairs_of_methods2[change_package_n]:
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
 
     @staticmethod
     def map_all(packages_m: set[ChangePackage], packages_n: set[ChangePackage],
@@ -842,10 +859,10 @@ class ChangePackage(ChangeEntity):
             ChangePackage.set_map(change_package_m, change_package_n)
             mapped_packages_m.add(change_package_m)
             mapped_packages_n.add(change_package_n)
-            packages_m.remove(change_package_m)
-            packages_n.remove(change_package_n)
+            packages_m.discard(change_package_m)
+            packages_n.discard(change_package_n)
 
-        # map other packages?
+        # map other packages
         if packages_m and packages_n:
             temporary_mapped_packages_m: set[ChangePackage] = set()
             temporary_mapped_packages_n: set[ChangePackage] = set()
@@ -937,6 +954,7 @@ class ChangeField(ChangeEntity):
     __literals: set[str]
 
     def __init__(self, change_package: ChangePackage, field, type: str, object_declaration: ObjectDecl):
+        super().__init__()
         self.__string_modifiers = set()
         self.__literals = set()
         self._start_line = object_declaration.sloc_range.start.line
@@ -1116,10 +1134,17 @@ class ChangeFile(ChangeEntity):
     __compilation_unit = None  # TODO
     __context: AnalysisContext = None
     __unit: AnalysisUnit = None
-    __packages: set[ChangePackage] = set()
+    __packages: set[ChangePackage]
     main_procedure: Optional[ChangeMethod]
 
+    @multimethod
+    def __init__(self):
+        super().__init__()
+        self.__packages = set()
+
+    @multimethod
     def __init__(self, revision_analyzer: RevisionAnalyzer, path: str, content: str):
+        self.__init__()
         self._start_line = 0
         self.__revision_analyzer = revision_analyzer
         self.__path = path
@@ -1169,18 +1194,19 @@ class ChangeFile(ChangeEntity):
         return None
 
     def compute_similarity(self, other: ChangeFile):
-        packages_m: set[ChangePackage] = self.get_packages()
-        packages_n: set[ChangePackage] = other.get_packages()
+        packages_m: set[ChangePackage] = self.get_packages().copy()
+        packages_n: set[ChangePackage] = other.get_packages().copy()
         mapped_packages_m: set[ChangePackage] = set()
         mapped_packages_n: set[ChangePackage] = set()
 
         package_m: Optional[ChangePackage] = None
         package_n: Optional[ChangePackage] = None
         for change_package in packages_m:
-            if change_package.get_simple_name() == self.get_simple_name():
+            # TODO: improve name comparison for package name and file name
+            if change_package.get_simple_name().lower() == self.get_simple_name().lower():
                 package_m = change_package
         for change_package in packages_n:
-            if change_package.get_simple_name() == other.get_simple_name():
+            if change_package.get_simple_name().lower() == other.get_simple_name().lower():
                 package_n = change_package
         if package_m is not None and package_n is not None:
             similarity: float = package_m.compute_similarity(package_n, False)
@@ -1188,8 +1214,8 @@ class ChangeFile(ChangeEntity):
                 ChangePackage.set_map(package_m, package_n)
                 mapped_packages_m.add(package_m)
                 mapped_packages_n.add(package_n)
-                packages_m.remove(package_m)
-                packages_n.remove(package_n)
+                packages_m.discard(package_m)
+                packages_n.discard(package_n)
         ChangePackage.map_all(packages_m, packages_n, mapped_packages_m, mapped_packages_n)
 
     @multimethod
@@ -1210,10 +1236,11 @@ class ChangeFile(ChangeEntity):
 
 
 class ChangeGraph:
-    __nodes: set[ChangeNode] = set()
+    __nodes: set[ChangeNode]
 
-    def __init__(self, pdg: PDGGraph):
-        changed_nodes: set[PDGNode] = pdg.get_change_nodes()
+    def __init__(self, graph: PDGGraph):
+        self.__nodes = set()
+        changed_nodes: set[PDGNode] = graph.get_changed_nodes()
         if len(changed_nodes) == 0:
             return
         node_dict: dict[PDGNode, ChangeNode] = dict()
@@ -1240,7 +1267,10 @@ class ChangeGraph:
         return True
 
     def has_methods(self) -> bool:
-        raise NotImplementedError('TODO')
+        for node in self.__nodes:
+            if node.ast_node_type == node_type(CallStmt):
+                return True
+        return False
 
     def get_change_sizes(self) -> list[int]:
         sizes: list[int] = [0, 0]
@@ -1266,16 +1296,15 @@ class ChangeMethod(ChangeEntity):
     __simple_name: str
     __number_of_parameters: int
     __return_type: Optional[str]
-    __declaration: libadalang.SubpBody
+    __declaration: Optional[SubpBody]
     __mapped_method: Optional[ChangeMethod] = None
     __parameter_types: str
-    __types: Optional[set[str]]
-    __fields: Optional[set[str]]
     __literals: Optional[set[str]]
-    __local_var_locs: dict[libadalang.Identifier, set[libadalang.Identifier]] = dict()  # TODO: probably unused?
+    __local_var_locs: dict[Identifier, set[Identifier]] = dict()  # TODO: probably unused?
 
     @multimethod
     def __init__(self):
+        super().__init__()
         self.__literals = set()
 
     @multimethod
@@ -1300,7 +1329,23 @@ class ChangeMethod(ChangeEntity):
     @multimethod
     def __init__(self, change_package: ChangePackage, method: SubpBody):
         self.__init__()
-        raise NotImplementedError
+        self._start_line = method.sloc_range.start.line
+        self.__change_package = change_package
+        self.__modifiers = 0  # TODO: remove modifiers
+        self.__simple_name = method.f_subp_spec.f_subp_name.f_name.text
+        self.__number_of_parameters = len(method.f_subp_spec.p_params)
+        self.__name = '{}({})'.format(self.__simple_name, self.__number_of_parameters)
+        self.__declaration = method
+        self.__parameter_types = self.__separator_parameter
+        for parameter in method.f_subp_spec.p_params:
+            self.__parameter_types += parameter.f_type_expr.text
+        if method.f_subp_spec.f_subp_kind.is_a(SubpKindFunction):
+            self.__return_type = method.f_subp_spec.p_returns.text
+        else:
+            self.__return_type = ''
+        self._vector = VectorVisitor.property_vector[method].copy()
+        VectorVisitor.property_vector[method] = None
+        self._compute_vector_length()
 
     def get_modifiers(self) -> int:
         raise NotImplementedError('No usage.')
@@ -1398,9 +1443,11 @@ class ChangeMethod(ChangeEntity):
             mapped_methods_m.add(change_method_m)
             mapped_methods_n.add(change_method_n)
             for p in pairs_of_methods1.get(cast(ChangeMethod, pair.get_object1())):
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
             for p in pairs_of_methods2.get(cast(ChangeMethod, pair.get_object2())):
-                pairs.remove(p)
+                if p in pairs:
+                    pairs.remove(p)
 
     @override
     def _compute_vector_length(self):
@@ -1425,8 +1472,46 @@ class ChangeMethod(ChangeEntity):
         signature: float = 0.0
         full_name1: str = self.get_full_name()
         full_name2: str = other.get_full_name()
-
-        raise NotImplementedError
+        # this check is for constructors, which doesn't make sense in Ada.
+        if (in_mapped_packages
+                and self.__change_package.get_simple_name() != other.__change_package.get_simple_name()
+                and self.__simple_name == self.__change_package.get_simple_name()
+                and other.__simple_name == other.__change_package.get_simple_name()):
+            full_name1 = 'package' + self.__parameter_types
+            full_name2 = 'package' + other.__parameter_types
+        # TODO: special case for getters and setters?
+        if self.__simple_name == other.__simple_name:
+            if full_name1 == full_name2:
+                signature = 1.0
+            else:
+                seq_parameter_types1: list[str] = []
+                seq_parameter_types2: list[str] = []
+                if len(self.get_parameter_types()) > 1:
+                    seq_parameter_types1: list[str] = self.get_parameter_types()[1:].split(self.__separator_parameter)
+                if len(other.get_parameter_types()) > 1:
+                    seq_parameter_types2: list[str] = other.get_parameter_types()[1:].split(self.__separator_parameter)
+                lcs_m: list[int] = []
+                lcs_n: list[int] = []
+                do_lcs(seq_parameter_types1, seq_parameter_types2, 0, 0, lcs_m, lcs_n)
+                signature = ((len(seq_parameter_types1) + len(seq_parameter_types2))
+                             / max(len(seq_parameter_types1) * 1.0, len(seq_parameter_types2) * 2.0)
+                             + len(lcs_m)
+                             * 2.0
+                             / (len(seq_parameter_types1) + len(seq_parameter_types2)) + 2.0) / 4.0
+        else:
+            seq1: list[str] = serialize(self.get_return_type())
+            seq2: list[str] = serialize(other.get_return_type())
+            lcs_m: list[int] = []
+            lcs_n: list[int] = []
+            do_lcs(seq1, seq2, 0, 0, lcs_m, lcs_n)
+            similarity_return_type: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
+            seq1 = serialize(full_name1)
+            seq2 = serialize(full_name2)
+            lcs_m = []
+            lcs_n = []
+            do_lcs(seq1, seq2, 0, 0, lcs_m, lcs_n)
+            similarity_full_name: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
+            signature = (similarity_return_type + 2.0 * similarity_full_name) / 3.0
         return signature
 
     @staticmethod
@@ -1475,7 +1560,7 @@ class ChangeMethod(ChangeEntity):
         for change_method in methods_m:
             name: str = change_method.get_simple_name()
             if name == change_method.get_change_package().get_simple_name():
-                name = 'class'  # TODO
+                name = 'package'  # TODO
             change_method_set: set[ChangeMethod] = methods_with_name_m.get(name, None)
             if change_method_set is None:
                 change_method_set = set()
@@ -1484,7 +1569,7 @@ class ChangeMethod(ChangeEntity):
         for change_method in methods_n:
             name: str = change_method.get_simple_name()
             if name == change_method.get_change_package().get_simple_name():
-                name = 'class'  # TODO
+                name = 'package'  # TODO
             change_method_set: set[ChangeMethod] = methods_with_name_n.get(name, None)
             if change_method_set is None:
                 change_method_set = set()
@@ -1536,18 +1621,12 @@ class ChangeMethod(ChangeEntity):
         self.__annotation = None
         self.__change_package = None
         self.__declaration = None
-        if self.__fields is not None:
-            self.__fields.clear()
-            self.__fields = None
         self.__literals.clear()
         self.__literals = None
         if self.__local_var_locs is not None:
             self.__local_var_locs.clear()
             self.__local_var_locs = None
         self.__mapped_method = None
-        if self.__types is not None:
-            self.__types.clear()
-            self.__types = None
 
     def print_changes(self):
         # TODO?: printstream
