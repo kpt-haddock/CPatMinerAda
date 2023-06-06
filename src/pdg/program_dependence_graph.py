@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import functools
 import warnings
 from collections import deque
 from enum import Enum
@@ -8,7 +9,7 @@ from typing import Optional, Final, cast, Generator
 from warnings import warn
 
 from libadalang import *
-from multimethod import multimethod
+from multimethod import multimethod, overload
 from overrides import override
 
 from src.exas.exas_feature import ExasFeature
@@ -334,11 +335,11 @@ class PDGActionNode(PDGNode):
         pre_definitions: set[PDGNode] = set()
         fields: set[str] = set()
         pre_fields: set[str] = set()
-        self.get_definitions(definitions, fields)
-        pre_node.get_definitions(pre_definitions, pre_fields)
+        self.get_definitions2(definitions, fields)
+        pre_node.get_definitions2(pre_definitions, pre_fields)
         return overlap(definitions, pre_definitions) or overlap(fields, pre_fields)
 
-    def get_definitions(self, definitions: set[PDGNode], fields: set[str]):
+    def get_definitions2(self, definitions: set[PDGNode], fields: set[str]):
         for e in self._in_edges:
             if isinstance(e.get_source(), PDGDataNode):
                 temporary_definitions: list[PDGNode] = e.get_source().get_definitions()
@@ -354,13 +355,17 @@ class PDGBuildingContext:
     source_file_path: str
     interprocedural: bool
 
-    stack_trys: deque[set[PDGActionNode]] = deque()
-    local_variables: deque[dict[str, str]] = deque()
-    local_variable_types: deque[dict[str, str]] = deque()
-    field_types: dict[str, str] = dict()
+    stack_trys: deque[set[PDGActionNode]]
+    local_variables: deque[dict[str, str]]
+    local_variable_types: deque[dict[str, str]]
+    field_types: dict[str, str]
 
     def __init__(self, repository, commit, source_file_path, interprocedural: bool):
         print('PDGBuildingContext constructor')
+        self.stack_trys = deque()
+        self.local_variables = deque()
+        self.local_variable_types = deque()
+        self.field_types = dict()
         self.repository = repository
         self.rev_commit = commit
         self.source_file_path = source_file_path
@@ -691,14 +696,30 @@ class PDGGraph:
         self.__init__(context)
         self.__context.add_scope()
         self.__context.set_method(method_declaration, False)
-        number_of_parameters: int = 0
         self._entry_node = PDGEntryNode(method_declaration,
                                         node_type(method_declaration),
                                         'START')
         self._nodes.add(self._entry_node)
         self._statement_nodes.add(self._entry_node)
-        for parameter in method_declaration.f_subp_spec.f_subp_params or []:
-            pass
+        self._parameters = []
+        for parameter in method_declaration.f_subp_spec.p_params or []:
+            if len(parameter.p_defining_names) == 1:
+                for name in parameter.p_defining_names:
+                    id: str = name.f_name.text
+                    self.merge_sequential(self.build_pdg(self._entry_node, '', parameter))
+                    info: list[str] = self.__context.get_local_variable_info(id)
+                    self._parameters.append(PDGDataNode(
+                        name,
+                        node_type(name),
+                        info[0],
+                        info[1],
+                        'PARAM_{}'.format(id),
+                        False,
+                        True
+                    ))
+                print(parameter)
+            else:
+                raise NotImplementedError('multiple parameters in single ParamSpec')
         self.__context.push_try()
         if method_declaration.f_decls and method_declaration.f_decls.f_decls:
             declarations: AdaNodeList = method_declaration.f_decls.f_decls
@@ -1495,6 +1516,49 @@ class PDGGraph:
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: ParenExpr) -> PDGGraph:
         return self.build_pdg(control, branch, node.f_expr)
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: ParamSpec) -> PDGGraph:
+        if len(node.f_ids) == 1:
+            for name in node.f_ids:
+                # TODO: get simple type?
+                type: str = node.f_type_expr.text
+                self.__context.add_local_variable(name.text, str(start_position(name)), type)
+                data_node: PDGDataNode = PDGDataNode(
+                    name,
+                    node_type(name),
+                    str(start_position(name)),
+                    type,
+                    name.text,
+                    False,
+                    True
+                )
+                graph: PDGGraph = PDGGraph(
+                    self.__context,
+                    PDGDataNode(
+                        None,
+                        node_type(NullLiteral),
+                        'Null',
+                        '',
+                        'Null'
+                    )
+                )
+                graph.merge_sequential_data(
+                    PDGActionNode(
+                        control,
+                        branch,
+                        node,
+                        node_type(AssignStmt),
+                        None,
+                        None,
+                        ':='
+                    ),
+                    Type.PARAMETER
+                )
+                graph.merge_sequential_data(data_node, Type.DEFINITION)
+                return graph
+        else:
+            raise NotImplementedError(node)
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: RealLiteral) -> PDGGraph:
