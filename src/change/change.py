@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pickle
 from abc import abstractmethod
 from builtins import NotImplementedError
 from collections import deque
@@ -14,9 +15,9 @@ from multimethod import multimethod
 from overrides import override
 
 from src.change.vector_visitor import VectorVisitor
-from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext
+from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext, PDGActionNode, PDGControlNode, PDGDataNode
 from src.repository.git_connector import GitConnector
-from src.treed.treed import TreedMapper
+from src.treed.treed import TreedMapper, TreedConstants
 from src.utils import Config, string_processor
 from src.utils.ada_ast_util import node_type
 from src.utils.ada_node_matcher import match
@@ -30,8 +31,6 @@ class ChangeNode:
     ast_node_type: int
     change_type: int = -1
     version: int = -1
-    starts: list[int]
-    lengths: list[int]
     type: str
     label: str
     data_type: str
@@ -41,17 +40,22 @@ class ChangeNode:
     out_edges: list[ChangeEdge]
 
     def __init__(self, node: PDGNode):
-        self.starts = []
-        self.lengths = []
         self.in_edges = []
         self.out_edges = []
         self.ast_node_type = node.get_ast_node_type()
         self.version = node.version
         if node.get_ast_node() is not None:
-            pass
-
-    def __set_position_info(self):
-        ...
+            if TreedConstants.PROPERTY_STATUS.get(node.get_ast_node(), None) is not None:
+                self.change_type = TreedConstants.PROPERTY_STATUS.get(node.get_ast_node())
+        if isinstance(node, PDGActionNode):
+            self.type = 'a'
+        elif isinstance(node, PDGControlNode):
+            self.type = 'c'
+        elif isinstance(node, PDGDataNode):
+            self.type = 'd'
+        self.label = node.get_exas_label()
+        self.data_name = node.get_data_name()
+        self.data_type = node.get_data_type()
 
     def get_ast_node_type(self) -> int:
         return self.ast_node_type
@@ -120,7 +124,6 @@ class ChangeAnalyzer:
     __number_of_code_revisions: int = -1
     __number_of_extracted_revisions: int = -1
     __git_connector: GitConnector
-    # __revision_analyzers: list[RevisionAnalyzer] = []
     __change_project: ChangeProject
     __output_path: str = 'C:/change graphs'
 
@@ -147,11 +150,6 @@ class ChangeAnalyzer:
     def set_project_id(self, project_id: int):
         self.__project_id = project_id
 
-    def get_svn_connector(self):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('get_svn_connector change_analyzer')
-
     def get_start_revision(self) -> int:
         return self.__start_revision
 
@@ -169,53 +167,17 @@ class ChangeAnalyzer:
     def increment_number_of_code_revisions(self):
         self.__number_of_code_revisions += 1
 
-    def get_log_entry(self):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('get_log_entry change_analyzer')
-
-    # def get_revision_analyzers(self) -> list[RevisionAnalyzer]:
-    #     return self.__revision_analyzers
-
     def get_change_project(self) -> ChangeProject:
         return self.__change_project
-
-    def build_svn_connection(self):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('build_svn_connector change_analyzer')
 
     def build_git_connector(self):
         self.__git_connector = GitConnector(self.__url + '/.git')
         self.__git_connector.connect()
 
-    @multimethod
-    def build_log_entries(self):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('build_log_entries change_analyzer')
-
-    @multimethod
-    def build_log_entries(self, start_revision: int, end_revision: int):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('build_log_entries change_analyzer')
-
-    def build_log_and_analyze(self):
-        # Not Implemented.
-        # Why: SVN
-        raise NotImplementedError('build_log_and_analyze change_analyzer')
-
-    # Not Implemented.
-    # Why: SVN
-    # def analyze(self):
-    #     self.__analyze(self.__start_revision, self.__end_revision)
-
     def analyze_git(self):
         self.__change_project = ChangeProject(self.__project_id, self.__project_name)
         self.__change_project.revisions = []
-        dir: str = 'C:/CPatMinerAda/out' + '/' + self.__project_name
-        # self.__analyze_git(self.__git_connector.get_commit('HEAD'))
+        dir: str = '{}/{}'.format(Config.output_path, self.__project_name)
 
         commits = self.__git_connector.log()
 
@@ -224,24 +186,31 @@ class ChangeAnalyzer:
         self.__number_of_extracted_revisions = 0
 
         for commit in commits:
-            #  TODO: check if  dir/ commit name .dat exists
+            file: str = '{}/{}.pickle'.format(dir, commit.hexsha)
+            if os.path.exists(file):
+                self.__number_of_extracted_revisions += 1
+                continue
             self.__analyze_git(commit)
+        self.__change_project.number_of_all_revisions = self.__number_of_revisions
 
     def __analyze_git(self, commit: Commit):
         self.__number_of_revisions += 1
-        if self.__number_of_revisions % 1000 == 0:
+        if self.__number_of_revisions % 1000 == 0 or self.__number_of_revisions == 1:
             print('Analyzing revision: {} {} from projectName'
                   .format(self.__number_of_revisions, commit.name_rev, self.__number_of_revisions))
         revision_analyzer: RevisionAnalyzer = RevisionAnalyzer(self, commit)
         analyzed: bool = revision_analyzer.analyze_git()
-        print('analyzed: {}'.format(analyzed))
         if analyzed:
             change_graphs: dict[str, dict[str, ChangeGraph]] = dict()
             for e in revision_analyzer.get_mapped_methods_m():
                 change_graph: ChangeGraph = e.get_change_graph(self.__git_connector.get_repository(), commit)
+                # from src.graphics.dot_graph import DotGraph
+                # # DEBUG:
+                # dot_graph: DotGraph = DotGraph(change_graph)
+                # dot_graph.to_graphics('dotfile', 'typetype')
                 change_sizes: list[int] = change_graph.get_change_sizes()
                 if 100 >= change_sizes[0] > 0 and 100 >= change_sizes[1] > 0 and change_sizes[0] + change_sizes[
-                    1] >= 3:  # and change_graph.has_methods():
+                    1] >= 2:  # and change_graph.has_methods(): # TODO: change 2 back to 3!!
                     cgs: Optional[dict[str, ChangeGraph]] = change_graphs.get(e.get_change_file().get_path())
                     if cgs is None:
                         cgs = dict()
@@ -249,16 +218,13 @@ class ChangeAnalyzer:
                     cgs['{},{},{},'.format(e.get_change_package().get_name(), e.get_simple_name(),
                                            e.get_parameter_types(), e._start_line)] = change_graph
                 e.clean_for_stats()
-            if len(change_graphs) > 0:
-                # write change graphs to file
-                raise NotImplementedError('pickle change_graphs and write to file')
+            if change_graphs:
+                dir: str = '{}/{}'.format(Config.output_path, self.__project_name)
+                if not os.path.isdir(dir):
+                    os.mkdir(dir)
+                with open('{}/{}.pickle'.format(dir, commit.hexsha), 'wb') as f:
+                    pickle.dump(change_graphs, f)
                 self.__number_of_extracted_revisions += 1
-
-    # Not Implemented.
-    # Why: SVN
-    # def __analyze(self, start_revision: int, end_revision: int):
-    #     for r in range(start_revision, end_revision + 1):
-    #         ...
 
 
 class RevisionAnalyzer:
@@ -396,7 +362,6 @@ class RevisionAnalyzer:
                     new_content: str
                     try:
                         old_content = diff.a_blob.data_stream.read().decode('ISO-8859-2')
-                        print(old_content)
                     except:
                         warn('Error reading file: ' + diff.a_blob.path)
                         continue
@@ -524,8 +489,6 @@ class RevisionAnalyzer:
 
     def __derive_method_changes(self):
         mapped_methods_m_copy: set[ChangeMethod] = self.__mapped_methods_m.copy()
-        print('__derive_method_changes')
-        print(self.__mapped_methods_m)
         for change_method_m in mapped_methods_m_copy:
             change_method_m.derive_changes()
             if change_method_m.get_change_type() == Type.UNCHANGED:
@@ -547,7 +510,7 @@ class ChangeEntity:
     _threshold_distance: int = 20
 
     _start_line: int
-    __change_type: Type = Type.UNCHANGED
+    __change_type: Type
     _vector: Optional[dict[int, int]]
     _vector_length: int
 
@@ -1132,6 +1095,7 @@ class ChangeFile(ChangeEntity):
     __simple_name: str
     __mapped_file: ChangeFile
     __compilation_unit = None  # TODO
+    __project: GPRProject
     __context: AnalysisContext = None
     __unit: AnalysisUnit = None
     __packages: set[ChangePackage]
@@ -1149,7 +1113,9 @@ class ChangeFile(ChangeEntity):
         self.__revision_analyzer = revision_analyzer
         self.__path = path
         self.__simple_name = FileIO.get_simple_file_name(path)
-        self.__context = AnalysisContext()
+        self.__project = GPRProject(revision_analyzer.get_change_analyzer().get_project_name())
+        provider: UnitProvider = self.__project.create_unit_provider()
+        self.__context = AnalysisContext(unit_provider=provider)
         self.__unit = self.__context.get_from_buffer(path, content)
         self.main_procedure = None
         if self.__unit.root:
@@ -1643,11 +1609,20 @@ class ChangeMethod(ChangeEntity):
         pdg1: PDGGraph = PDGGraph(self.__declaration,
                                   PDGBuildingContext(repository, commit, self.get_change_file().get_path(), False))
         pdg1.build_change_graph(0)
-        pdg2: PDGGraph = PDGGraph(self.__mapped_method.__declaration, PDGBuildingContext(repository, commit,
-                                                                                         self.__mapped_method.get_change_file().get_path(),
-                                                                                         False))
+        pdg2: PDGGraph = PDGGraph(self.__mapped_method.__declaration,
+                                  PDGBuildingContext(
+                                      repository,
+                                      commit,
+                                      self.__mapped_method.get_change_file().get_path(),
+                                      False))
+
         pdg2.build_change_graph(1)
         pdg2.build_change_graph(pdg1)
+
+        # from src.graphics.dot_graph import DotGraph
+        # dot_graph = DotGraph(pdg2, False)
+        # dot_graph.to_graphics('dotfile', 'typetype')
+
         return ChangeGraph(pdg2)
 
 
@@ -1660,29 +1635,19 @@ class ChangeProject:
     ]
     size_bins: list[int]
 
-    # TODO: missing static { ... }
-
-    __id: int = -1
+    __id: int
     __name: str
     token_indexes: dict[str, int]
     index_tokens: dict[int, str]
     __running_time: int
-    number_of_all_revisions: int = 0
+    number_of_all_revisions: int
     revisions: list[ChangeRevision]
 
     @multimethod
     def __init__(self, id: int, name: str):
+        self.number_of_all_revisions = 0
         self.__id = id
         self.__name = name
-
-    @multimethod
-    def __init__(self, path: str, id: int, name: str):
-        self.__id = id
-        self.__name = name
-        prefix: str = '{}/{}-'.format(path, name)
-        # TODO
-        # self.index_tokens
-        # self.token_indexes
 
     def get_id(self) -> int:
         return self.__id
