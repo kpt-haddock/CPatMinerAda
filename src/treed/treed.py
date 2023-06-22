@@ -36,16 +36,20 @@ class TreedConstants:
 
 
 class TreedBuilder(AdaNodeVisitor):
-    # TODO: these should probably be Instance variables and not Class variables!
     __root: AdaNode
     __visit_doc_tags: bool
-    tree: dict[AdaNode, list[AdaNode]] = dict()
-    tree_height: dict[AdaNode, int] = dict()
-    tree_depth: dict[AdaNode, int] = dict()
-    tree_vector: dict[AdaNode, dict[str, int]] = dict()
-    tree_root_vector: dict[AdaNode, dict[str, int]] = dict()
+    tree: dict[AdaNode, list[AdaNode]]
+    tree_height: dict[AdaNode, int]
+    tree_depth: dict[AdaNode, int]
+    tree_vector: dict[AdaNode, dict[str, int]]
+    tree_root_vector: dict[AdaNode, dict[str, int]]
 
     def __init__(self, root: AdaNode, visit_doc_tags: bool):
+        self.tree = dict()
+        self.tree_height = dict()
+        self.tree_depth = dict()
+        self.tree_vector = dict()
+        self.tree_root_vector = dict()
         self.__root = root
         self.__visit_doc_tags = visit_doc_tags
         self.tree_depth[root] = 0
@@ -145,26 +149,39 @@ class PrintVisitor(AdaNodeVisitor):
 
 
 class TreedMapper:
-    # TODO: these variables probably should not be Class variables, but Instance variables instead.
     __ast_m: AdaNode
     __ast_n: AdaNode
-    __tree: dict[AdaNode, list[AdaNode]] = dict()
-    __tree_height: dict[AdaNode, int] = dict()
-    __tree_depth: dict[AdaNode, int] = dict()
-    __tree_vector: dict[AdaNode, dict[str, int]] = dict()
-    __tree_map: dict[AdaNode, dict[AdaNode, float]] = dict()
-    __pivots_m: set[AdaNode] = set()
-    __pivots_n: set[AdaNode] = set()
-    __name_map_frequency: dict[str, dict[str, int]] = dict()
-    __name_frequency: dict[str, int] = dict()
-    __rename_map: dict[str, str] = dict()
-    __pivot_copy: dict[AdaNode, dict[AdaNode, float]] = dict()
-    __number_of_changes: int = 0
-    __number_of_unmaps: int = 0
-    __number_of_non_name_unmaps: int = 0
+    __tree: dict[AdaNode, list[AdaNode]]
+    __tree_height: dict[AdaNode, int]
+    __tree_depth: dict[AdaNode, int]
+    __tree_vector: dict[AdaNode, dict[str, int]]
+    __tree_map: dict[AdaNode, dict[AdaNode, float]]
+    __pivots_m: set[AdaNode]
+    __pivots_n: set[AdaNode]
+    __name_map_frequency: dict[str, dict[str, int]]
+    __name_frequency: dict[str, int]
+    __rename_map: dict[str, str]
+    __pivot_copy: dict[AdaNode, dict[AdaNode, float]]
+    __number_of_changes: int
+    __number_of_unmaps: int
+    __number_of_non_name_unmaps: int
     __visit_doc_tags: bool = False
 
     def __init__(self, ast_m: AdaNode, ast_n: AdaNode):
+        self.__tree = dict()
+        self.__tree_height = dict()
+        self.__tree_depth = dict()
+        self.__tree_vector = dict()
+        self.__tree_map = dict()
+        self.__pivots_m = set()
+        self.__pivots_n = set()
+        self.__name_map_frequency = dict()
+        self.__name_frequency = dict()
+        self.__rename_map = dict()
+        self.__pivot_copy = dict()
+        self.__number_of_changes = 0
+        self.__number_of_unmaps = 0
+        self.__number_of_non_name_unmaps = 0
         self.__ast_m = ast_m
         self.__ast_n = ast_n
 
@@ -546,7 +563,7 @@ class TreedMapper:
 
     @staticmethod
     def __start_position(node: AdaNode) -> int:
-        lines: list[str] = node.unit.root.text.split('\r\n')
+        lines: list[str] = node.unit.root.text.splitlines()
         start_position: int = 0
         for i in range(0, node.sloc_range.start.line - 1):
             start_position += len(lines[i])
@@ -616,7 +633,6 @@ class TreedMapper:
                 else:
                     similarity = compute_char_lcs(serialize_to_chars(text_m), serialize_to_chars(text_n))
             similarity = threshold + similarity * (1 - threshold)
-            print('SIMILARITY: {}, NO CHILDREN: {}, {}'.format(similarity, node_m, node_n))
             return similarity
         if children_m and children_n:
             vector_m: dict[str, int] = self.__tree_vector.get(node_m)
