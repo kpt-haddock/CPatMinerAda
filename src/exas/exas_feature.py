@@ -15,7 +15,7 @@ class ExasFeature(Feature):
 
     _hash: int
 
-    _next: dict[ExasSingleFeature, ExasSequentialFeature] = {}
+    _next: dict[ExasSingleFeature, ExasSequentialFeature]
 
     @abstractmethod
     def get_feature_length(self) -> int:
@@ -25,6 +25,7 @@ class ExasFeature(Feature):
     _frequency: int = 0
 
     def __init__(self):
+        self._next = {}
         type(self)._number_of_features += 1
 
     def get_number_of_features(self) -> int:
@@ -90,7 +91,7 @@ class ExasFeature(Feature):
 
 
 class ExasSequentialFeature(ExasFeature):
-    __sequence: list[ExasSingleFeature] = []
+    __sequence: list[ExasSingleFeature]
 
     def __init__(self, sequence: list[ExasSingleFeature], pre: ExasFeature, single_feature: ExasSingleFeature):
         super().__init__()
