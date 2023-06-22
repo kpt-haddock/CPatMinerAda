@@ -18,18 +18,12 @@ class DotGraph:
     STYLE_ROUNDED: str = 'rounded'
     STYLE_DOTTED: str = 'dotted'
     DOT_PATH: str = 'C:/....path to dot.exe'
-    
-    __graph: str = ''
     dot: Digraph
-
-    @multimethod
-    def __init__(self, graph: str):
-        self.__graph = graph
 
     @multimethod
     def __init__(self, change_graph: ChangeGraph):
         #  add nodes
-        self.__graph += self.add_start()
+        self.dot = Digraph()
         ids: dict[ChangeNode, int] = {}
         id: int = 0
         for node in change_graph.get_nodes():
@@ -43,7 +37,7 @@ class DotGraph:
                 shape = DotGraph.SHAPE_DIAMOND
             elif node.get_type() == 'd':
                 shape = DotGraph.SHAPE_ELLIPSE
-            self.__graph += self.add_node(id, node.get_label(), shape, None, color, color)
+            self.dot.node(str(id), node.get_label(), shape=shape)
 
         #  add edges
         for node in change_graph.get_nodes():
@@ -52,15 +46,9 @@ class DotGraph:
                 s_id: int = ids[edge.get_source()]
                 label: str = edge.get_label()
                 if label == 'T' or label == 'F':
-                    self.__graph += self.add_edge(s_id, t_id, None, None, label)
+                    self.dot.edge(str(s_id), str(t_id), label)
                 else:
-                    self.__graph += self.add_edge(s_id, t_id, DotGraph.STYLE_DOTTED, None, label)
-        
-        self.__graph += self.add_end()
-
-    @staticmethod
-    def add_start() -> str:
-        return 'digraph G {\n'
+                    self.dot.edge(str(s_id), str(t_id), style=DotGraph.STYLE_DOTTED, label=label)
 
     @multimethod
     def __init__(self, pdg: PDGGraph, change_only: bool):
@@ -134,30 +122,5 @@ class DotGraph:
         node += ']\n'
         return node
 
-    @staticmethod
-    def add_edge(s_id: int, e_id: int, style: Optional[str], color: Optional[str], label: Optional[str]) -> str:
-        edge: str = ''
-        if label is None:
-            label = ''
-        edge += '{} -> {} [label="{}"'.format(s_id, e_id, label)
-        if style is not None and style != '':
-            edge += ' style={}'.format(style)
-        if color is not None and color != '':
-            edge += ' color={}'.format(color)
-        edge += '];\n'
-        return edge
-
-    @staticmethod
-    def add_end() -> str:
-        return '}'
-
-    def get_graph(self) -> str:
-        return self.__graph
-
-    def to_dot_file(self, file: str):
-        with open(file, 'w') as f:
-            f.write(self.__graph)
-
     def to_graphics(self, file: str, type: str):
-        self.dot.render(view=True)
-        # subprocess.call([self.DOT_PATH, '-T{}'.format(type), '{}.dot'.format(file), '-o{}.{}'.format(file, type)])
+        self.dot.render(view=True, filename=file)
