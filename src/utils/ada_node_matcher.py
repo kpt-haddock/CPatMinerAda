@@ -1,6 +1,5 @@
 from typing import Optional
 
-import libadalang
 from libadalang import *
 from multimethod import multimethod
 
@@ -12,7 +11,6 @@ def match(node1: Optional[AdaNode], node2: Optional[AdaNode]) -> bool:
     elif node1 is None or node2 is None:
         return False
     elif node1.kind_name != node2.kind_name:
-        # print('kind_name left: {}, kind_name right: {}'.format(node1.kind_name, node2.kind_name))
         return False
     return match_specific(node1, node2)
 
@@ -850,7 +848,7 @@ def match_specific(node1: ConstantPresent, node2: ConstantPresent) -> bool:
 # 137: CompositeConstraint
 @multimethod
 def match_specific(node1: CompositeConstraint, node2: CompositeConstraint) -> bool:
-    ...
+    return match(node1.f_constraints, node2.f_constraints)
 
 
 # 138: DeltaConstraint
@@ -970,6 +968,9 @@ def match_specific(node1: RelationOp, node2: RelationOp) -> bool:
 
 
 # 155: BoxExpr
+@multimethod
+def match_specific(node1: BoxExpr, node2: BoxExpr) -> bool:
+    return True
 
 
 # 156: CaseExprAlternative
@@ -1212,8 +1213,17 @@ def match_specific(node1: HandledStmts, node2: HandledStmts) -> bool:
 # 213: InterfaceKindProtected
 # 214: InterfaceKindSynchronized
 # 215: InterfaceKindTask
+
 # 216: IterTypeIn
+@multimethod
+def match_specific(node1: IterTypeIn, node2: IterTypeIn) -> bool:
+    return True
+
+
 # 217: IterTypeOf
+@multimethod
+def match_specific(node1: IterTypeOf, node2: IterTypeOf) -> bool:
+    return True
 
 
 # 218: LibraryItem
@@ -1387,7 +1397,15 @@ def match_specific(node1: SyntheticRenamingClause, node2: SyntheticRenamingClaus
 
 
 # 253: ReverseAbsent
+@multimethod
+def match_specific(node1: ReverseAbsent, node2: ReverseAbsent) -> bool:
+    return True
+
+
 # 254: ReversePresent
+@multimethod
+def match_specific(node1: ReversePresent, node2: ReversePresent) -> bool:
+    return True
 
 
 # 255: SelectWhenPart
