@@ -1,7 +1,9 @@
 from typing import Type
 
-from libadalang import AdaNode, _kind_to_astnode_cls
+from libadalang import AdaNode, _kind_to_astnode_cls, BinOp
 from multimethod import multimethod
+
+from src.treed.treed import TreedConstants
 
 
 @multimethod
@@ -15,7 +17,16 @@ def is_literal(node: AdaNode) -> bool:
 
 
 def is_changed(node: AdaNode) -> bool:
-    raise NotImplementedError('ada_ast_util is_changed')
+    if node not in TreedConstants.PROPERTY_STATUS:
+        return False
+    status: int
+    if node.is_a(BinOp):
+        status = TreedConstants.PROPERTY_STATUS[node.f_op]
+    else:
+        status = TreedConstants.PROPERTY_STATUS[node]
+    if status > TreedConstants.STATUS_UNCHANGED:
+        return True
+    return False
 
 
 @multimethod
@@ -29,7 +40,7 @@ def node_type(node: AdaNode) -> int:
 
 
 def start_position(node: AdaNode) -> int:
-    lines: list[str] = node.unit.root.text.split('\r\n')
+    lines: list[str] = node.unit.root.text.splitlines()
     position: int = 0
     for i in range(0, node.sloc_range.start.line - 1):
         position += len(lines[i])
