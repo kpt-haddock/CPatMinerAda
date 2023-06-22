@@ -88,6 +88,40 @@ def compute_char_lcs(term1: list[int], term2: list[int]) -> float:
 
 
 @multimethod
+def do_lcs(sequence1: list[str], sequence2: list[str], neighborhood: int, min_neighborhood: int, lcs_m: list[int], lcs_n: list[int]):
+    """
+    :param sequence1: input sequence 1
+    :param sequence2: input sequence 2
+    :param neighborhood: the number of surrounding matched lines
+    :param min_neighborhood: should be 0
+    :param lcs_m: indices of matches in sequence 1
+    :param lcs_n: incdices of matches in sequence 2
+    """
+    item_indices: dict[str, int] = {}
+    index(sequence1, item_indices)
+    index(sequence2, item_indices)
+    matches_m: list[int] = [-1] * len(sequence1)
+    matches_n: list[int] = [-1] * len(sequence2)
+    do_lcs(sequence1, sequence2, 0, len(sequence1) - 1, 0, len(sequence2) - 1, neighborhood, min_neighborhood, matches_m, matches_n)
+    for i in range(0, len(matches_m)):
+        j: int = matches_m[i]
+        if j > -1:
+            lcs_m.append(i)
+            lcs_n.append(j)
+
+
+def index(sequence: list[str], item_indices: dict[str, int]):
+    for i in range(0, len(sequence)):
+        item: str = sequence[i]
+        item_index: int = len(item_indices)
+        if item in item_indices:
+            item_index = item_indices[item]
+        else:
+            item_indices[item] = item_index
+        sequence[i] = str(item_index)
+
+
+@multimethod
 def do_lcs(term1: list[str], term2: list[str], start_m: int, end_m: int, start_n: int, end_n: int, neighborhood: int,
            min: int, lcs_m: list[int], lcs_n: list[int]):
     len_m: int = end_m - start_m + 1
