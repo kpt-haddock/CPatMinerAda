@@ -1,0 +1,9 @@
+{
+  "git_repositories_dir": "C:/repos",
+  "change_graphs_storage_dir": "C:/ada_change_miner_out/change_graphs",
+  "patterns_storage_dir": "C:/ada_change_miner_out/patterns",
+
+  "logger_file_path": "miner.log",
+  "logger_file_log_level": "DEBUG",
+  "logger_stdout_log_level": "DEBUG"
+}

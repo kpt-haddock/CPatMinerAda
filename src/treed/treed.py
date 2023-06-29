@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from bisect import insort
 from functools import cmp_to_key
-from types import NoneType
 from typing import Optional, cast
-from warnings import warn
 
 from libadalang import AdaNode, Identifier, Expr, _kind_to_astnode_cls, BinOp, SubpBody, Stmt, BlockStmt, ReturnStmt, \
     ExitStmt, ForLoopStmt, WhileLoopStmt, ObjectDecl, DefiningNameList, DefiningName
@@ -15,6 +13,7 @@ from src.utils.ada_node_matcher import match
 from src.utils.ada_node_visitor import AdaNodeVisitor, accept
 from src.utils.pair import Pair
 from src.utils.string_processor import compute_char_lcs, serialize_to_chars
+from src.log import logger
 
 
 class TreedConstants:
@@ -871,10 +870,14 @@ class TreedMapper:
         for i in range(0, len(mapped_nodes), 2):
             node_m: AdaNode = mapped_nodes[i]
             node_n: AdaNode = mapped_nodes[i + 1]
-            list_m.remove(node_m)
-            list_n.remove(node_n)
-            heights_m.remove(node_m)
-            heights_n.remove(node_n)
+            if node_m in list_m:
+                list_m.remove(node_m)
+            if node_n in list_n:
+                list_n.remove(node_n)
+            if node_m in heights_m:
+                heights_m.remove(node_m)
+            if node_n in heights_n:
+                heights_n.remove(node_n)
         while len(list_m) > 0 and len(list_n) > 0:
             height_m: int = self.__tree_height[heights_m[0]]
             height_n: int = self.__tree_height[heights_n[0]]
@@ -913,6 +916,8 @@ class TreedMapper:
 
 
 class TreedUtils:
+    build_ast_label_warned = False
+    build_label_for_vector_warned = False
 
     @staticmethod
     def build_label_for_vector(node: AdaNode) -> int:
@@ -922,7 +927,9 @@ class TreedUtils:
                 return (label | (hash(node.text) << 7)) & 0x10ffff
             if node.is_a(Identifier):
                 return (label | (hash(node.text) << 7)) & 0x10ffff
-        warn('build_label_for_vector not fully implemented.')
+        if not TreedUtils.build_label_for_vector_warned:
+            logger.warning('build_label_for_vector not fully implemented.')
+            TreedUtils.build_label_for_vector_warned = True
         return label
 
     @staticmethod
@@ -935,5 +942,7 @@ class TreedUtils:
                 return '{}({})'.format(label, cast(BinOp, node).f_op.text)
             if node.is_a(Identifier):
                 return '{}({})'.format(label, node.text)
-            warn('build_ast_label not fully implemented.')
+            if not TreedUtils.build_ast_label_warned:
+                logger.warning('build_ast_label not fully implemented.')
+                TreedUtils.build_ast_label_warned = True
         return label

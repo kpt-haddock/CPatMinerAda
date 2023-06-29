@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import abc
-import warnings
 from collections import deque
 from enum import Enum
 from typing import Optional, Final, cast
-from warnings import warn
 
 from libadalang import *
 from multimethod import multimethod
@@ -15,6 +13,7 @@ from src.exas.exas_feature import ExasFeature
 from src.treed.treed import TreedConstants
 from src.utils import ada_ast_util
 from src.utils.ada_ast_util import node_type, start_position
+from src.log import logger
 
 
 def overlap(s1: set, s2: set) -> bool:
@@ -64,16 +63,16 @@ class PDGNode:
 
     @abc.abstractmethod
     def get_label(self) -> str:
-        warn('abstract method')
+        logger.warning('abstract method')
         return ''
 
     @abc.abstractmethod
     def get_exas_label(self) -> str:
-        warn('abstract method')
+        logger.warning('abstract method')
         return ''
 
     def get_ast_node_type(self) -> int:
-        warnings.warn('AST NODE TYPE SHOULD BE AdaNode Type not int')
+        # logger.warning('AST NODE TYPE SHOULD BE AdaNode Type not int')
         return self._ast_node_type
 
     def set_ast_node_type(self, ast_node_type: int):
@@ -183,19 +182,21 @@ class PDGNode:
 
     def add_neighbors(self, nodes: set[PDGNode]):
         for edge in self._in_edges:
-            if not isinstance(edge, PDGDataEdge) or (edge.get_type() != Type.DEPENDENCE and edge.get_type() != Type.REFERENCE):
+            if not isinstance(edge, PDGDataEdge) or (
+                    edge.get_type() != Type.DEPENDENCE and edge.get_type() != Type.REFERENCE):
                 if not edge.get_source().is_empty_node() and edge.get_source() not in nodes:
                     nodes.add(edge.get_source())
                     edge.get_source().add_neighbors(nodes)
         for edge in self._out_edges:
-            if not isinstance(edge, PDGDataEdge) or (edge.get_type() != Type.DEPENDENCE and edge.get_type() != Type.REFERENCE):
+            if not isinstance(edge, PDGDataEdge) or (
+                    edge.get_type() != Type.DEPENDENCE and edge.get_type() != Type.REFERENCE):
                 if not edge.get_target().is_empty_node() and edge.get_target() not in nodes:
                     nodes.add(edge.get_target())
                     edge.get_target().add_neighbors(nodes)
 
     # TODO: implement this differently
     def is_same(self, node: PDGNode) -> bool:
-        warn('PDGNode is_same should be implemented differently?')
+        # logger.warning('PDGNode is_same should be implemented differently?')
         if self._key is None and node._key is not None:
             return False
         if self._key != node._key:
@@ -209,7 +210,7 @@ class PDGNode:
         return False
 
     def get_definition(self) -> Optional[PDGNode]:
-        if isinstance(self, PDGDataNode) and len (self._in_edges) == 1 and isinstance(self._in_edges[0], PDGDataEdge):
+        if isinstance(self, PDGDataNode) and len(self._in_edges) == 1 and isinstance(self._in_edges[0], PDGDataEdge):
             edge: PDGDataEdge = cast(PDGDataEdge, self._in_edges[0])
             if edge.get_type() == Type.REFERENCE:
                 return edge.get_source()
@@ -293,7 +294,8 @@ class PDGActionNode(PDGNode):
     __control_edge: PDGControlEdge
 
     @multimethod
-    def __init__(self, control: PDGNode, branch: str, ast_node: Optional[AdaNode], node_type: int, key: Optional[str], type: Optional[str], name: Optional[str]):
+    def __init__(self, control: PDGNode, branch: str, ast_node: Optional[AdaNode], node_type: int, key: Optional[str],
+                 type: Optional[str], name: Optional[str]):
         super().__init__(ast_node, node_type, key)
         self._parameter_types = None
         if control is not None:
@@ -303,7 +305,8 @@ class PDGActionNode(PDGNode):
         self._name = name
 
     @multimethod
-    def __init__(self, control: PDGNode, branch: str, ast_node: Optional[AdaNode], node_type: int, key: Optional[str], type: Optional[str], name: Optional[str], exception_types: list[object]):
+    def __init__(self, control: PDGNode, branch: str, ast_node: Optional[AdaNode], node_type: int, key: Optional[str],
+                 type: Optional[str], name: Optional[str], exception_types: list[object]):
         self.__init__(control, branch, ast_node, node_type, key, type, name)
         self._exception_types = exception_types
 
@@ -352,7 +355,6 @@ class PDGActionNode(PDGNode):
 
 
 class PDGBuildingContext:
-
     method: Optional[SubpBody] = None
     source_file_path: str
     interprocedural: bool
@@ -581,7 +583,8 @@ class PDGDataNode(PDGNode):
         self._data_name = data_name
 
     @multimethod
-    def __init__(self, ast_node: Optional[AdaNode], node_type: int, key: str, data_type: Optional[str], data_name: str, is_field: bool, is_declaration: bool):
+    def __init__(self, ast_node: Optional[AdaNode], node_type: int, key: str, data_type: Optional[str], data_name: str,
+                 is_field: bool, is_declaration: bool):
         super().__init__(ast_node, node_type, key)
         self._data_type = data_type
         self._data_name = data_name
@@ -610,7 +613,9 @@ class PDGDataNode(PDGNode):
 
     @override
     def get_exas_label(self) -> str:
-        if self._ast_node.is_a(NullLiteral):
+        if self._ast_node is None:
+            return 'UNKNOWN'
+        elif self._ast_node.is_a(NullLiteral):
             return 'Null'
         elif self._ast_node.is_a(CharLiteral):
             return 'Character'
@@ -623,8 +628,6 @@ class PDGDataNode(PDGNode):
         elif self._ast_node.is_a(Identifier):
             if self._ast_node.text == 'True' or self._ast_node.text == 'False':
                 return 'Boolean'
-        elif self._ast_node is None:
-            return 'UNKNOWN'
         return self._data_type
 
     @override
@@ -849,6 +852,25 @@ class PDGGraph:
             return PDGGraph(self.__context, action_node)
 
     @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: Allocator) -> PDGGraph:
+        if node.f_subpool:
+            raise NotImplementedError(node)
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_type_or_expr)
+        graph.merge_sequential_data(
+            PDGActionNode(
+                control,
+                branch,
+                node,
+                node_type(node),
+                None,
+                '',  # TODO: type
+                '<new>'
+            ),
+            Type.PARAMETER
+        )
+        return graph
+
+    @multimethod
     def build_pdg(self, control: PDGNode, branch: str, nodes: AlternativesList) -> PDGGraph:
         if len(nodes) == 1:
             return self.build_pdg(control, branch, nodes[0])
@@ -889,9 +911,6 @@ class PDGGraph:
 
         graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_prefix)
 
-        if hasattr(node.f_attribute, 'p_fully_qualified_name'):
-            print('YES!')
-
         action_node: PDGActionNode = PDGActionNode(
             control,
             branch,
@@ -903,6 +922,19 @@ class PDGGraph:
         )
         graph.merge_sequential_data(action_node, Type.RECEIVER)
         return graph
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: BoxExpr) -> PDGGraph:
+        return PDGGraph(
+            self.__context,
+            PDGDataNode(
+                node,
+                node_type(node),
+                '',
+                node.text,
+                ''
+            )
+        )
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: BracketAggregate) -> PDGGraph:
@@ -967,7 +999,7 @@ class PDGGraph:
         else:
             if definitions[0].is_dummy():
                 for definition in definitions:
-                    del graph.__definition_store[definition.get_key()]
+                    graph.__definition_store.pop(definition.get_key(), None)
                     definition.copy_data(dest_node)
                     ns: Optional[set[PDGDataNode]] = graph.__definition_store.get(definition.get_key(), None)
                     if ns is None:
@@ -1022,34 +1054,63 @@ class PDGGraph:
     def build_pdg(self, control: PDGNode, branch: str, node: CallExpr) -> PDGGraph:
         graphs: list[PDGGraph] = []
 
-        # TODO: this doesn't work properly for things other than node.f_name == Identifier, such as AttributeRef...
-        action_node: PDGActionNode = PDGActionNode(
-            control,
-            branch,
-            node,
-            node_type(node),
-            None,
-            '',  # TODO
-            node.f_name.text
-        )
-        if hasattr(node.f_name, 'doc_name'):
-            names: list[str] = node.f_name.doc_name.split('.')
-            data_type: str = '.'.join(names[:-1])
-            data_name: str = names[-2]
-            graphs.append(PDGGraph(
-                self.__context,
-                PDGDataNode(
-                    None, node_type(DottedName), node.f_name.doc_name, data_type, data_name
+        if node.p_kind == 'array_index':
+            graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_name)
+            data_node: PDGDataNode = PDGDataNode(
+                node, node_type(node), node.text + 'key', 'get_key[.]', node.text  # TODO: get_key!
+            )
+            logger.warning('build_pdg ArrayAccess get_key not implemented')
+
+            indices: list[PDGGraph] = []
+            match node.f_suffix:
+                case AssocList():
+                    assoc_list: AssocList = cast(AssocList, node.f_suffix)
+                    for index in assoc_list:
+                        indices.append(self.build_argument_pdg(control, branch, index))
+                case _:
+                    raise NotImplementedError(node.f_suffix.__class__)
+            graph.merge_sequential_data(data_node, Type.QUALIFIER)
+            for index in indices:
+                index.merge_sequential_data(data_node, Type.PARAMETER)
+            graph.merge_branches(indices)
+            return graph
+
+        action_node: PDGActionNode
+        match node.f_name:
+            case Identifier():
+                action_node = PDGActionNode(
+                    control,
+                    branch,
+                    node,
+                    node_type(node),
+                    None,
+                    'MethodCall',  # TODO
+                    node.f_name.text
                 )
-            ))
-        else:
-            # TODO: graphs[0] should be something like package origin? "Printing." "this" does NOT make sense in Ada
-            graphs.append(PDGGraph(
-                self.__context,
-                PDGDataNode(
-                    None, node_type(DottedName), 'this', 'this', 'this'
-                )
-            ))
+                if hasattr(node.f_name, 'doc_name'):
+                    names: list[str] = node.f_name.doc_name.split('.')
+                    data_type: str = '.'.join(names[:-1])
+                    data_name: str = names[-2]
+                    graphs.append(PDGGraph(
+                        self.__context,
+                        PDGDataNode(
+                            None, node_type(DottedName), node.f_name.doc_name, data_type, data_name
+                        )
+                    ))
+            case DottedName():
+                # graphs.append(self.build_pdg(control, branch, node.f_name))
+                # if isinstance(graphs[0].get_only_out(), PDGActionNode):
+                #     action_node = cast(PDGActionNode, graphs[0].get_only_out())
+                # else:
+                #     raise NotImplementedError
+                logger.warning('CallExpr with DottedName not implemented!')
+                return PDGGraph(self.__context)
+            case AttributeRef():
+                graphs.append(self.build_pdg(control, branch, node.f_name))
+                if isinstance(graphs[0].get_only_out(), PDGActionNode):
+                    action_node = cast(PDGActionNode, graphs[0].get_only_out())
+            case _:
+                raise NotImplementedError(node.f_name)
 
         match node.f_suffix:
             case AssocList():
@@ -1136,48 +1197,85 @@ class PDGGraph:
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: DottedName) -> PDGGraph:
-        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_prefix)
-        data_node: PDGDataNode = graph.get_only_data_out()
-        if data_node.get_data_type().startswith('UNKNOWN'):
-            name: str = node.f_suffix.text
-            #  Uppercase check??
-            return PDGGraph(
-                self.__context,
-                PDGDataNode(
-                    node, node_type(node), node.text, node.text, node.f_suffix.text, True, False)
-                )
-        else:
-            graph.merge_sequential_data(
-                PDGDataNode(
-                    node,
-                    node_type(node),
-                    node.text,
-                    '{}.{}'.format(data_node.get_data_type(), node.f_suffix.text),
-                    node.f_suffix.text,
-                    True,
-                    False
-                ),
-                Type.QUALIFIER
+        if node.p_is_call:
+            graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_prefix)
+            action_node: PDGActionNode = PDGActionNode(
+                control,
+                branch,
+                node,
+                node_type(node),
+                None,
+                '',  # TODO: type string, same as CallExpr!
+                node.f_suffix.text
             )
-        return graph
+            graph.merge_sequential_data(action_node, Type.RECEIVER)
+            return graph
+        else:
+            graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_prefix)
+            data_node: PDGDataNode = graph.get_only_data_out()
+            if data_node.get_data_type().startswith('UNKNOWN'):
+                name: str = node.f_suffix.text
+                #  Uppercase check??
+                return PDGGraph(
+                    self.__context,
+                    PDGDataNode(
+                        node, node_type(node), node.text, node.text, node.f_suffix.text, True, False)
+                )
+            else:
+                graph.merge_sequential_data(
+                    PDGDataNode(
+                        node,
+                        node_type(node),
+                        node.text,
+                        '{}.{}'.format(data_node.get_data_type(), node.f_suffix.text),
+                        node.f_suffix.text,
+                        True,
+                        False
+                    ),
+                    Type.QUALIFIER
+                )
+            return graph
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: ExitStmt) -> PDGGraph:
-        action_node: PDGActionNode = PDGActionNode(
-            control,
-            branch,
+        if not node.f_cond_expr:
+            exit_node: PDGActionNode = PDGActionNode(
+                control,
+                branch,
+                node,
+                node_type(node),
+                node.f_loop_name.text if node.f_loop_name else '',
+                None,
+                'Exit'
+            )
+            exit_graph: PDGGraph = PDGGraph(self.__context, exit_node)
+            exit_graph._breaks.add(exit_node)
+            exit_graph._sinks.remove(exit_node)
+            exit_graph._statement_sinks.remove(exit_node)
+            return exit_graph
+
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_cond_expr)
+        control_node: PDGControlNode = PDGControlNode(control, branch, node, node_type(node))
+        graph.merge_sequential_data(control_node, Type.CONDITION)
+        empty_then_graph: PDGGraph = PDGGraph(self.__context,
+                                              PDGActionNode(control_node, 'T', None, node_type(NullStmt), None, None, 'empty'))
+        exit_node: PDGActionNode = PDGActionNode(
+            control_node,
+            'T',
             node,
             node_type(node),
             node.f_loop_name.text if node.f_loop_name else '',
             None,
             'Exit'
         )
-        if node.f_cond_expr:
-            raise NotImplementedError('Conditional Exit not supported!')
-        graph: PDGGraph = PDGGraph(self.__context, action_node)
-        graph._breaks.add(action_node)
-        graph._sinks.remove(action_node)
-        graph._statement_sinks.remove(action_node)
+        exit_graph: PDGGraph = PDGGraph(self.__context, exit_node)
+        exit_graph._breaks.add(exit_node)
+        exit_graph._sinks.remove(exit_node)
+        exit_graph._statement_sinks.remove(exit_node)
+        empty_then_graph.merge_sequential(exit_graph)
+        empty_else_graph: PDGGraph = PDGGraph(self.__context,
+                                              PDGActionNode(control_node, 'F', None, node_type(NullStmt), None, None, 'empty'))
+        graph.merge_branches([empty_then_graph, empty_else_graph])
         return graph
 
     @multimethod
@@ -1279,7 +1377,6 @@ class PDGGraph:
             True
         )
 
-
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: HandledStmts):
         return self.build_pdg(control, branch, node.f_stmts)
@@ -1299,8 +1396,7 @@ class PDGGraph:
                     name
                 )
             )
-
-        info: list[str] = self.__context.get_local_variable_info(name)
+        is_call: bool
         if node.p_is_call:
             graph: PDGGraph
             if hasattr(node, 'doc_name'):
@@ -1322,16 +1418,17 @@ class PDGGraph:
                     )
                 )
             action_node: PDGActionNode = PDGActionNode(
-                    control,
-                    branch,
-                    node,
-                    node_type(node),
-                    None,
-                    '',  # TODO! type string, same as CallExpr!
-                    node.text
-                )
+                control,
+                branch,
+                node,
+                node_type(node),
+                None,
+                '',  # TODO! type string, same as CallExpr!
+                node.text
+            )
             graph.merge_sequential_data(action_node, Type.QUALIFIER)
             return graph
+        info: list[str] = self.__context.get_local_variable_info(name)
         if info:
             graph: PDGGraph = PDGGraph(
                 self.__context,
@@ -1339,13 +1436,17 @@ class PDGGraph:
             )
             return graph
         if node.p_expression_type:
-            type: str = node.p_expression_type.f_name.text
+            type: str = node.p_expression_type.text
+            if node.p_expression_type.f_name:
+                type = node.p_expression_type.f_name.text
             return PDGGraph(
                 self.__context,
-                PDGDataNode(node, node_type(node), str(start_position(node.p_expression_type)), type, name, False, False)
+                PDGDataNode(node, node_type(node), str(start_position(node.p_expression_type)), type, name)
             )
-        print(node.p_expression_type)
-        raise NotImplementedError(node)
+        return PDGGraph(
+            self.__context,
+            PDGDataNode(node, node_type(node), name, None, name)
+        )
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, nodes: list[ElsifExprPart], else_expr: Expr):
@@ -1409,7 +1510,8 @@ class PDGGraph:
         then_graph.merge_sequential_data(PDGDataNode(dummy_node), Type.DEFINITION)
 
         if len(node.f_alternatives):
-            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F', list(node.f_alternatives), node.f_else_expr)
+            alternatives_graph: PDGGraph = self.build_pdg(control_node, 'F', list(node.f_alternatives),
+                                                          node.f_else_expr)
             graph.merge_branches([then_graph, alternatives_graph])
         else:
             else_graph: PDGGraph = self.build_argument_pdg(control_node, 'F', node.f_else_expr)
@@ -1563,8 +1665,10 @@ class PDGGraph:
                 True,
             )
             if node.f_default_expr is None:
-                graph: PDGGraph = PDGGraph(self.__context, PDGDataNode(None, node_type(NullLiteral), 'Null', '', 'Null'))
-                graph.merge_sequential_data(PDGActionNode(control, branch, node, node_type(AssignStmt), None, None, ':='), Type.PARAMETER)
+                graph: PDGGraph = PDGGraph(self.__context,
+                                           PDGDataNode(None, node_type(NullLiteral), 'Null', '', 'Null'))
+                graph.merge_sequential_data(
+                    PDGActionNode(control, branch, node, node_type(AssignStmt), None, None, ':='), Type.PARAMETER)
                 graph.merge_sequential_data(data_node, Type.DEFINITION)
                 return graph
             graph: PDGGraph = self.build_pdg(control, branch, node.f_default_expr)
@@ -1611,8 +1715,9 @@ class PDGGraph:
                                 definition._is_field,
                                 False),
                     Type.REFERENCE)
-                graph.merge_sequential_data(PDGActionNode(control, branch, node, node_type(AssignStmt), None, None, ':='),
-                                            Type.PARAMETER)
+                graph.merge_sequential_data(
+                    PDGActionNode(control, branch, node, node_type(AssignStmt), None, None, ':='),
+                    Type.PARAMETER)
                 graph.merge_sequential_data(data_node, Type.DEFINITION)
             return graph
         raise NotImplementedError
@@ -1633,7 +1738,7 @@ class PDGGraph:
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: ParamAssoc) -> PDGGraph:
         if node.f_designator:
-            warn('WARNING: ParamAssoc f_designator is not implemented!')
+            logger.warning('WARNING: ParamAssoc f_designator is not implemented!')
         return self.build_pdg(control, branch, node.f_r_expr)
 
     @multimethod
@@ -1684,6 +1789,21 @@ class PDGGraph:
             raise NotImplementedError(node)
 
     @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: QualExpr) -> PDGGraph:
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_suffix)
+        action_node: PDGActionNode = PDGActionNode(
+            control,
+            branch,
+            node,
+            node_type(node),
+            None,
+            node.f_prefix.text,
+            '<QualExpr>'
+        )
+        graph.merge_sequential_data(action_node, Type.PARAMETER)
+        return graph
+
+    @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: RealLiteral) -> PDGGraph:
         return PDGGraph(self.__context,
                         PDGDataNode(
@@ -1727,6 +1847,23 @@ class PDGGraph:
     def build_pdg(self, control: PDGNode, branch: str, node: StringLiteral) -> PDGGraph:
         return PDGGraph(self.__context,
                         PDGDataNode(node, node_type(node), node.text, 'String', node.p_eval_as_string))
+
+    @multimethod
+    def build_pdg(self, control: PDGNode, branch: str, node: UnOp) -> PDGGraph:
+        graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_expr)
+        graph.merge_sequential_data(
+            PDGActionNode(
+                control,
+                branch,
+                node,
+                node_type(node),
+                None,
+                None,
+                node.f_op.text
+            ),
+            Type.PARAMETER
+        )
+        return graph
 
     @multimethod
     def build_pdg(self, control: PDGNode, branch: str, node: UsePackageClause) -> PDGGraph:
@@ -1880,7 +2017,8 @@ class PDGGraph:
         if returns:
             dummy: PDGDataNode = PDGDataNode(None,
                                              node_type(Identifier),
-                                             PDGNode.PREFIX_DUMMY + str(start_position(exp)) + '_' + str(start_position(exp) + len(exp.text)),
+                                             PDGNode.PREFIX_DUMMY + str(start_position(exp)) + '_' + str(
+                                                 start_position(exp) + len(exp.text)),
                                              returns[0].get_data_type(),
                                              PDGNode.PREFIX_DUMMY, False, True)
             for ret in returns:
@@ -2164,7 +2302,8 @@ class PDGGraph:
                         PDGDataEdge(pre_node, node, Type.DEPENDENCE)
 
     @multimethod
-    def build_sequential_closure(self, node: PDGNode, done_nodes: set[PDGNode], pre_nodes_of_node: dict[PDGNode, list[PDGNode]]):
+    def build_sequential_closure(self, node: PDGNode, done_nodes: set[PDGNode],
+                                 pre_nodes_of_node: dict[PDGNode, list[PDGNode]]):
         if node._control not in done_nodes:
             self.build_sequential_closure(node._control, done_nodes, pre_nodes_of_node)
         pre_nodes_of_node.get(node).extend(pre_nodes_of_node.get(node._control))
@@ -2216,8 +2355,8 @@ class PDGGraph:
             i: int = 0
             while i < len(node.get_in_edges()):
                 edge: PDGEdge = node.get_in_edges()[i]
-                if edge.get_source() != self._entry_node\
-                        and isinstance(edge, PDGDataEdge)\
+                if edge.get_source() != self._entry_node \
+                        and isinstance(edge, PDGDataEdge) \
                         and edge.get_type() == Type.DEPENDENCE:
                     del node.get_in_edges()[i]
                     edge.get_source().get_out_edges().remove(edge)
@@ -2228,8 +2367,8 @@ class PDGGraph:
             i = 0
             while i < len(node.get_out_edges()):
                 edge: PDGEdge = node.get_out_edges()[i]
-                if edge.get_target() != self._end_node\
-                        and isinstance(edge, PDGDataEdge)\
+                if edge.get_target() != self._end_node \
+                        and isinstance(edge, PDGDataEdge) \
                         and edge.get_type() == Type.DEPENDENCE:
                     del node.get_out_edges()[i]
                     edge.get_target().get_in_edges().remove(edge)
@@ -2356,7 +2495,8 @@ class PDGGraph:
         if not node.get_definitions() and node.get_qualifier() is None:
             definition: PDGNode = definitions.get(node._key)
             if definition is None:
-                definition = PDGDataNode(None, node.get_ast_node_type(), node._key, node.get_data_type(), node.get_data_name(), True, True)
+                definition = PDGDataNode(None, node.get_ast_node_type(), node._key, node.get_data_type(),
+                                         node.get_data_name(), True, True)
                 definitions[node._key] = definition
                 self._nodes.add(definition)
             PDGDataEdge(definition, node, Type.REFERENCE)

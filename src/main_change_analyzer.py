@@ -1,8 +1,9 @@
 import os.path
-import libadalang as lal
+import settings
 
 from datetime import datetime
 from src.change import ChangeAnalyzer
+from src.log import logger
 
 
 class MainChangeAnalyzer:
@@ -17,7 +18,7 @@ class MainChangeAnalyzer:
             change_analyzer.build_git_connector()
             change_analyzer.analyze_git()
             end_project_time = datetime.now()
-            print('Done {} in {}'.format(name, end_project_time - start_project_time))
+            logger.info('Done {} in {}'.format(name, end_project_time - start_project_time))
 
     @staticmethod
     def repositories():
@@ -27,4 +28,6 @@ class MainChangeAnalyzer:
 
 if __name__ == '__main__':
     analyzer = MainChangeAnalyzer()
-    analyzer.analyze('C:/repos/ada-synth-lib', 'C:/repos/ada-synth-lib/ada_synth_lib.gpr')
+    repositories_dir = settings.get('git_repositories_dir')
+    analyzer.analyze(os.path.join(repositories_dir, 'ada-synth-lib'),
+                     os.path.join(repositories_dir, 'ada-synth-lib/ada_synth_lib.gpr'))

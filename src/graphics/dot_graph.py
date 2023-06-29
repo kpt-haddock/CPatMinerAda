@@ -122,5 +122,5 @@ class DotGraph:
         node += ']\n'
         return node
 
-    def to_graphics(self, file: str, type: str):
-        self.dot.render(view=True, filename=file)
+    def to_graphics(self, file: str):
+        self.dot.render(view=False, filename=file)
