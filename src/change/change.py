@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import pickle
+import time
 from abc import abstractmethod
 from builtins import NotImplementedError
 from collections import deque
 from enum import Enum
 from typing import Optional, cast
-from warnings import warn
+import traceback
 
 import libadalang
 from git import Commit, DiffIndex
@@ -14,17 +15,19 @@ from libadalang import *
 from multimethod import multimethod
 from overrides import override
 
+from src.log import logger
 from src.change.vector_visitor import VectorVisitor
 from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext, PDGActionNode, PDGControlNode, PDGDataNode
 from src.repository.git_connector import GitConnector
 from src.treed.treed import TreedMapper, TreedConstants
-from src.utils import Config, string_processor
+from src.utils import string_processor
 from src.utils.ada_ast_util import node_type
 from src.utils.ada_node_matcher import match
 from src.utils.ada_node_visitor import accept
 from src.utils.file_io import FileIO
 from src.utils.pair import Pair
 from src.utils.string_processor import serialize, do_lcs
+import src.settings as settings
 
 
 class ChangeNode:
@@ -177,7 +180,7 @@ class ChangeAnalyzer:
     def analyze_git(self):
         self.__change_project = ChangeProject(self.__project_id, self.__project_name)
         self.__change_project.revisions = []
-        dir: str = '{}/{}'.format(Config.output_path, self.__project_name)
+        dir: str = os.path.join(settings.get('change_graphs_storage_dir'), self.__project_name)
 
         commits = self.__git_connector.log()
 
@@ -195,22 +198,36 @@ class ChangeAnalyzer:
 
     def __analyze_git(self, commit: Commit):
         self.__number_of_revisions += 1
-        if self.__number_of_revisions % 1000 == 0 or self.__number_of_revisions == 1:
-            print('Analyzing revision: {} {} from projectName'
-                  .format(self.__number_of_revisions, commit.name_rev, self.__number_of_revisions))
+        if self.__number_of_revisions % 1 == 0 or self.__number_of_revisions == 1:
+            logger.info('Analyzing revision: {} {} from projectName'
+                        .format(self.__number_of_revisions, commit.name_rev, self.__number_of_revisions))
         revision_analyzer: RevisionAnalyzer = RevisionAnalyzer(self, commit)
         analyzed: bool = revision_analyzer.analyze_git()
         if analyzed:
             change_graphs: dict[str, dict[str, ChangeGraph]] = dict()
             for e in revision_analyzer.get_mapped_methods_m():
-                change_graph: ChangeGraph = e.get_change_graph(self.__git_connector.get_repository(), commit)
-                # from src.graphics.dot_graph import DotGraph
-                # # DEBUG:
-                # dot_graph: DotGraph = DotGraph(change_graph)
-                # dot_graph.to_graphics('dotfile', 'typetype')
+                try:
+                    change_graph: ChangeGraph = e.get_change_graph(self.__git_connector.get_repository(), commit)
+                    logger.debug(f'{e.get_full_name()} -> {e.get_mapped_method().get_full_name()}')
+                except Exception as exception:
+                    logger.error(f'Unable to build a graph for '
+                                 f'method={e.get_name()} {e.get_sloc_range()}, '
+                                 f'exception={traceback.format_exc()}')
+                    continue
+                from src.graphics.dot_graph import DotGraph
+                # DEBUG:
+                repo_out_dir: str = os.path.join(settings.get('change_graphs_storage_dir'),
+                                                 os.path.split(os.path.dirname(self.get_project_name()))[-1])
+                if not os.path.isdir(repo_out_dir):
+                    os.mkdir(repo_out_dir)
+                commit_dir: str = os.path.join(repo_out_dir, commit.hexsha)
+                if not os.path.isdir(commit_dir):
+                    os.mkdir(commit_dir)
+                dot_graph: DotGraph = DotGraph(change_graph)
+                dot_graph.to_graphics(os.path.join(commit_dir, str(e)))
                 change_sizes: list[int] = change_graph.get_change_sizes()
                 if 100 >= change_sizes[0] > 0 and 100 >= change_sizes[1] > 0 and change_sizes[0] + change_sizes[
-                    1] >= 2:  # and change_graph.has_methods(): # TODO: change 2 back to 3!!
+                    1] >= 3:  # and change_graph.has_methods():
                     cgs: Optional[dict[str, ChangeGraph]] = change_graphs.get(e.get_change_file().get_path())
                     if cgs is None:
                         cgs = dict()
@@ -219,10 +236,11 @@ class ChangeAnalyzer:
                                            e.get_parameter_types(), e._start_line)] = change_graph
                 e.clean_for_stats()
             if change_graphs:
-                dir: str = '{}/{}'.format(Config.output_path, self.__project_name)
-                if not os.path.isdir(dir):
-                    os.mkdir(dir)
-                with open('{}/{}.pickle'.format(dir, commit.hexsha), 'wb') as f:
+                repo_out_dir: str = os.path.join(settings.get('change_graphs_storage_dir'),
+                                                 os.path.split(os.path.dirname(self.get_project_name()))[-1])
+                if not os.path.isdir(repo_out_dir):
+                    os.mkdir(repo_out_dir)
+                with open('{}/{}.pickle'.format(repo_out_dir, commit.hexsha), 'wb') as f:
                     pickle.dump(change_graphs, f)
                 self.__number_of_extracted_revisions += 1
 
@@ -329,8 +347,6 @@ class RevisionAnalyzer:
     def analyze_git(self) -> bool:
         if not self.__build_git_modified_files():
             return False
-        if Config.count_change_file_only:
-            return True
         if not self.__map():
             return False
         self.__derive_changes()
@@ -353,8 +369,6 @@ class RevisionAnalyzer:
                 self.change_revision.id = self.__revision
                 self.change_revision.number_of_files = len(diffs)
                 self.change_revision.files = []
-            if Config.count_change_file_only:
-                return True
             if len(diffs) > 0:
                 self.__change_analyzer.increment_number_of_code_revisions()
                 for diff in diffs.iter_change_type('M'):
@@ -363,12 +377,12 @@ class RevisionAnalyzer:
                     try:
                         old_content = diff.a_blob.data_stream.read().decode('ISO-8859-2')
                     except:
-                        warn('Error reading file: ' + diff.a_blob.path)
+                        logger.warning('Error reading file: ' + diff.a_blob.path)
                         continue
                     try:
                         new_content = diff.b_blob.data_stream.read().decode('ISO-8859-2')
                     except:
-                        warn('Error reading file: ' + diff.b_blob.path)
+                        logger.warning('Error reading file: ' + diff.b_blob.path)
                         continue
                     file_m: ChangeFile = ChangeFile(self, diff.a_blob.path, old_content)
                     file_n: ChangeFile = ChangeFile(self, diff.b_blob.path, new_content)
@@ -492,8 +506,10 @@ class RevisionAnalyzer:
         for change_method_m in mapped_methods_m_copy:
             change_method_m.derive_changes()
             if change_method_m.get_change_type() == Type.UNCHANGED:
-                self.__mapped_methods_m.remove(change_method_m)
-                self.__mapped_methods_n.remove(change_method_m.get_mapped_method())
+                if change_method_m in self.__mapped_methods_m:
+                    self.__mapped_methods_m.remove(change_method_m)
+                if change_method_m.get_mapped_method() in self.__mapped_methods_n:
+                    self.__mapped_methods_n.remove(change_method_m.get_mapped_method())
 
 
 class Type(Enum):
@@ -1284,8 +1300,7 @@ class ChangeMethod(ChangeEntity):
         self.__declaration = method
         self.__parameter_types = self.__separator_parameter
         for parameter in method.f_subp_spec.p_params:
-            print(parameter)
-            raise NotImplementedError
+            self.__parameter_types += parameter.f_type_expr.text
         if method.f_subp_spec.f_subp_kind.is_a(SubpKindFunction):
             self.__return_type = method.f_subp_spec.f_subp_returns.text
         self._vector = VectorVisitor.property_vector[method].copy()
@@ -1347,6 +1362,9 @@ class ChangeMethod(ChangeEntity):
 
     def get_declaration(self):
         raise NotImplementedError('No usage.')
+
+    def get_sloc_range(self) -> SlocRange:
+        return self.__declaration.sloc_range
 
     @override
     def get_mapped_entity(self) -> Optional[ChangeMethod]:
@@ -1470,14 +1488,17 @@ class ChangeMethod(ChangeEntity):
             lcs_m: list[int] = []
             lcs_n: list[int] = []
             do_lcs(seq1, seq2, 0, 0, lcs_m, lcs_n)
-            similarity_return_type: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
-            seq1 = serialize(full_name1)
-            seq2 = serialize(full_name2)
-            lcs_m = []
-            lcs_n = []
-            do_lcs(seq1, seq2, 0, 0, lcs_m, lcs_n)
-            similarity_full_name: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
-            signature = (similarity_return_type + 2.0 * similarity_full_name) / 3.0
+            try:
+                similarity_return_type: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
+                seq1 = serialize(full_name1)
+                seq2 = serialize(full_name2)
+                lcs_m = []
+                lcs_n = []
+                do_lcs(seq1, seq2, 0, 0, lcs_m, lcs_n)
+                similarity_full_name: float = len(lcs_m) * 2.0 / (len(seq1) + len(seq2))
+                signature = (similarity_return_type + 2.0 * similarity_full_name) / 3.0
+            except:
+                signature = 0.0
         return signature
 
     @staticmethod
@@ -1621,7 +1642,7 @@ class ChangeMethod(ChangeEntity):
 
         # from src.graphics.dot_graph import DotGraph
         # dot_graph = DotGraph(pdg2, False)
-        # dot_graph.to_graphics('dotfile', 'typetype')
+        # dot_graph.to_graphics('dotfile')
 
         return ChangeGraph(pdg2)
 
