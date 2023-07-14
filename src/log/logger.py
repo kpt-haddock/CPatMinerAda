@@ -3,7 +3,7 @@ import time
 import os
 import functools
 
-import src.settings as settings
+import settings as settings
 
 
 class CustomLogger:

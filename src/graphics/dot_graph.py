@@ -4,8 +4,8 @@ from typing import Optional
 from graphviz import Digraph
 from multimethod import multimethod
 
-from src.change import ChangeNode, ChangeGraph
-from src.pdg import PDGNode, PDGGraph, PDGEntryNode, PDGControlNode, PDGActionNode, PDGDataNode, PDGDataEdge, Type, \
+from change import ChangeNode, ChangeGraph
+from pdg import PDGNode, PDGGraph, PDGEntryNode, PDGControlNode, PDGActionNode, PDGDataNode, PDGDataEdge, Type, \
     PDGControlEdge
 
 
