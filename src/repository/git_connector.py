@@ -6,7 +6,7 @@ from multimethod import multimethod
 
 from git import Repo, Commit, DiffIndex
 
-from src.repository.changed_file import ChangedFile
+from repository.changed_file import ChangedFile
 import charade
 
 

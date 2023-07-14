@@ -6,8 +6,8 @@ from uuid import uuid1
 class Pair:
     __object1: object
     __object2: object
-    __weight: float = -1.0
-    __weight1: float = 0.0
+    __weight: float
+    __weight1: float
 
     def __init__(self, object1: object, object2: object, weight: float = -1.0, weight1: float = 0.0):
         self.__object1 = object1
@@ -37,7 +37,7 @@ class Pair:
             compare_value = self.compare(self.__weight1, other.__weight1)
         return compare_value
 
-    def compare(self, f1: float, f2 : float) -> int:
+    def compare(self, f1: float, f2: float) -> int:
         if f1 < f2:
             return -1
         elif f1 > f2:

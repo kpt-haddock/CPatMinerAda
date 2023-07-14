@@ -9,11 +9,11 @@ from libadalang import *
 from multimethod import multimethod
 from overrides import override
 
-from src.exas.exas_feature import ExasFeature
-from src.treed.treed import TreedConstants
-from src.utils import ada_ast_util
-from src.utils.ada_ast_util import node_type, start_position
-from src.log import logger
+from exas.exas_feature import ExasFeature
+from treed.treed import TreedConstants
+from utils import ada_ast_util
+from utils.ada_ast_util import node_type, start_position
+from log import logger
 
 
 def overlap(s1: set, s2: set) -> bool:
@@ -1054,26 +1054,26 @@ class PDGGraph:
     def build_pdg(self, control: PDGNode, branch: str, node: CallExpr) -> PDGGraph:
         graphs: list[PDGGraph] = []
 
-        if node.p_kind == 'array_index':
-            graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_name)
-            data_node: PDGDataNode = PDGDataNode(
-                node, node_type(node), node.text + 'key', 'get_key[.]', node.text  # TODO: get_key!
-            )
-            logger.warning('build_pdg ArrayAccess get_key not implemented')
-
-            indices: list[PDGGraph] = []
-            match node.f_suffix:
-                case AssocList():
-                    assoc_list: AssocList = cast(AssocList, node.f_suffix)
-                    for index in assoc_list:
-                        indices.append(self.build_argument_pdg(control, branch, index))
-                case _:
-                    raise NotImplementedError(node.f_suffix.__class__)
-            graph.merge_sequential_data(data_node, Type.QUALIFIER)
-            for index in indices:
-                index.merge_sequential_data(data_node, Type.PARAMETER)
-            graph.merge_branches(indices)
-            return graph
+        # if node.p_kind == 'array_index':
+        #     graph: PDGGraph = self.build_argument_pdg(control, branch, node.f_name)
+        #     data_node: PDGDataNode = PDGDataNode(
+        #         node, node_type(node), node.text + 'key', 'get_key[.]', node.text  # TODO: get_key!
+        #     )
+        #     logger.warning('build_pdg ArrayAccess get_key not implemented')
+        #
+        #     indices: list[PDGGraph] = []
+        #     match node.f_suffix:
+        #         case AssocList():
+        #             assoc_list: AssocList = cast(AssocList, node.f_suffix)
+        #             for index in assoc_list:
+        #                 indices.append(self.build_argument_pdg(control, branch, index))
+        #         case _:
+        #             raise NotImplementedError(node.f_suffix.__class__)
+        #     graph.merge_sequential_data(data_node, Type.QUALIFIER)
+        #     for index in indices:
+        #         index.merge_sequential_data(data_node, Type.PARAMETER)
+        #     graph.merge_branches(indices)
+        #     return graph
 
         action_node: PDGActionNode
         match node.f_name:
@@ -1396,7 +1396,6 @@ class PDGGraph:
                     name
                 )
             )
-        is_call: bool
         if node.p_is_call:
             graph: PDGGraph
             if hasattr(node, 'doc_name'):

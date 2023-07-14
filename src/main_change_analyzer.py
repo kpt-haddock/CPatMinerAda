@@ -2,8 +2,8 @@ import os.path
 import settings
 
 from datetime import datetime
-from src.change import ChangeAnalyzer
-from src.log import logger
+from change import ChangeAnalyzer
+from log import logger
 
 
 class MainChangeAnalyzer:

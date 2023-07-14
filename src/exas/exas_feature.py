@@ -5,7 +5,7 @@ from abc import abstractmethod
 from multimethod import multimethod
 from overrides import override
 
-from src.codemining.feature import Feature
+from codemining.feature import Feature
 
 
 class ExasFeature(Feature):

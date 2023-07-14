@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from libadalang import AdaNode
-from multimethod import multimethod
 
 
 def accept(node: AdaNode, visitor: AdaNodeVisitor):

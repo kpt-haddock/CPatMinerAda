@@ -15,19 +15,19 @@ from libadalang import *
 from multimethod import multimethod
 from overrides import override
 
-from src.log import logger
-from src.change.vector_visitor import VectorVisitor
-from src.pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext, PDGActionNode, PDGControlNode, PDGDataNode
-from src.repository.git_connector import GitConnector
-from src.treed.treed import TreedMapper, TreedConstants
-from src.utils import string_processor
-from src.utils.ada_ast_util import node_type
-from src.utils.ada_node_matcher import match
-from src.utils.ada_node_visitor import accept
-from src.utils.file_io import FileIO
-from src.utils.pair import Pair
-from src.utils.string_processor import serialize, do_lcs
-import src.settings as settings
+from log import logger
+from change.vector_visitor import VectorVisitor
+from pdg import PDGNode, PDGEdge, PDGGraph, PDGBuildingContext, PDGActionNode, PDGControlNode, PDGDataNode
+from repository.git_connector import GitConnector
+from treed.treed import TreedMapper, TreedConstants
+from utils import string_processor
+from utils.ada_ast_util import node_type
+from utils.ada_node_matcher import match
+from utils.ada_node_visitor import accept
+from utils.file_io import FileIO
+from utils.pair import Pair
+from utils.string_processor import serialize, do_lcs
+import settings as settings
 
 
 class ChangeNode:
@@ -214,7 +214,7 @@ class ChangeAnalyzer:
                                  f'method={e.get_name()} {e.get_sloc_range()}, '
                                  f'exception={traceback.format_exc()}')
                     continue
-                from src.graphics.dot_graph import DotGraph
+                from graphics.dot_graph import DotGraph
                 # DEBUG:
                 repo_out_dir: str = os.path.join(settings.get('change_graphs_storage_dir'),
                                                  os.path.split(os.path.dirname(self.get_project_name()))[-1])
@@ -1597,7 +1597,7 @@ class ChangeMethod(ChangeEntity):
         if match(self.__declaration, change_method_n.__declaration):
             return
         treed_mapper: TreedMapper = TreedMapper(self.__declaration, change_method_n.__declaration)
-        treed_mapper.map(False)
+        treed_mapper.map()
         if treed_mapper.has_non_name_unmap():
             self.set_change_type(Type.MODIFIED)
             change_method_n.set_change_type(Type.MODIFIED)
@@ -1639,10 +1639,6 @@ class ChangeMethod(ChangeEntity):
 
         pdg2.build_change_graph(1)
         pdg2.build_change_graph(pdg1)
-
-        # from src.graphics.dot_graph import DotGraph
-        # dot_graph = DotGraph(pdg2, False)
-        # dot_graph.to_graphics('dotfile')
 
         return ChangeGraph(pdg2)
 

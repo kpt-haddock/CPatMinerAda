@@ -5,8 +5,8 @@ from typing import Optional
 from libadalang import *
 from overrides import overrides
 
-from src.utils.ada_node_visitor import AdaNodeVisitor
-from src.utils.ada_ast_util import node_type
+from utils.ada_node_visitor import AdaNodeVisitor
+from utils.ada_ast_util import node_type
 
 
 class VectorVisitor(AdaNodeVisitor):

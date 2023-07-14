@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 
 from feature import Feature
-from src.codemining.bucket import Bucket
+from codemining.bucket import Bucket
 
 
 class Fragment(ABC):

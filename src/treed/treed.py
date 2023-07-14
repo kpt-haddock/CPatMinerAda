@@ -4,16 +4,18 @@ from bisect import insort
 from functools import cmp_to_key
 from typing import Optional, cast
 
+import libadalang as lal
+
 from libadalang import AdaNode, Identifier, Expr, _kind_to_astnode_cls, BinOp, SubpBody, Stmt, BlockStmt, ReturnStmt, \
     ExitStmt, ForLoopStmt, WhileLoopStmt, ObjectDecl, DefiningNameList, DefiningName
 from multimethod import multimethod
 from overrides import overrides
 
-from src.utils.ada_node_matcher import match
-from src.utils.ada_node_visitor import AdaNodeVisitor, accept
-from src.utils.pair import Pair
-from src.utils.string_processor import compute_char_lcs, serialize_to_chars
-from src.log import logger
+from utils.ada_node_matcher import match
+from utils.ada_node_visitor import AdaNodeVisitor, accept
+from utils.pair import Pair
+from utils.string_processor import compute_char_lcs, serialize_to_chars
+from log import logger
 
 
 class TreedConstants:
@@ -205,7 +207,7 @@ class TreedMapper:
     def has_non_name_unmap(self) -> bool:
         return self.__number_of_non_name_unmaps > 0
 
-    def map(self, visit_doc_tags: bool):
+    def map(self, visit_doc_tags: bool = False):
         self.__visit_doc_tags = visit_doc_tags
         self.__build_trees(visit_doc_tags)
         self._map_pivots()
@@ -661,10 +663,13 @@ class TreedMapper:
             pairs_of_node[node1] = pairs1
         pairs.sort(reverse=True)
         i: int = 0
+        pairs_copy = pairs.copy()
         while pairs:
             pair: Pair = pairs[0]
-            similarities[i] = pair.get_weight()
-            # TODO: missed this i += 1 after LONG debugging session, continue debugging from here...
+            try:
+                similarities[i] = pair.get_weight()
+            except:
+                print('huh?')
             i += 1
             for p in pairs_of_node[cast(AdaNode, pair.get_object1())]:
                 if p in pairs:
