@@ -1,5 +1,4 @@
 import os
-import tempfile
 import uuid
 import pickle
 import multiprocessing
@@ -8,9 +7,10 @@ import json
 import subprocess
 import datetime
 
-from libadalang import AnalysisContext, SubpBody
+import libadalang as lal
 
 from log import logger
+from pathlib import Path
 from pydriller import Repository
 from pydriller.domain.commit import ModificationType
 
@@ -20,6 +20,7 @@ import changegraph
 
 class GitAnalyzer:
     GIT_REPOSITORIES_DIR = settings.get('git_repositories_dir')
+    GIT_REPOSITORIES = settings.get('repos')
     STORAGE_DIR = settings.get('change_graphs_storage_dir')
     STORE_INTERVAL = settings.get('change_graphs_store_interval', 300)
     TRAVERSE_ASYNC = settings.get('traverse_async', True)
@@ -132,7 +133,9 @@ class GitAnalyzer:
                     'old_path': mod.old_path,
 
                     'new_src': mod.source_code,
-                    'new_path': mod.new_path
+                    'new_path': mod.new_path,
+
+                    'repo_name': repo_name
                 })
 
             commits.append(cut)
@@ -150,6 +153,10 @@ class GitAnalyzer:
     def _store_change_graphs(graphs):
         pickled_graphs = []
         for graph in graphs:
+            if graph.repo_info and graph.repo_info.repo_name:
+                changegraph.export_graph_image(graph, os.path.join(GitAnalyzer.STORAGE_DIR,
+                                                                   graph.repo_info.repo_name,
+                                                                   f'{str(uuid.uuid4())}.dot'))
             try:
                 pickled = pickle.dumps(graph, protocol=5)
                 pickled_graphs.append(pickled)
@@ -181,8 +188,8 @@ class GitAnalyzer:
                     continue
 
             old_method_to_new = GitAnalyzer._get_methods_mapping(
-                GitAnalyzer._extract_methods(mod['old_path'], mod['old_src']),
-                GitAnalyzer._extract_methods(mod['new_path'], mod['new_src'])
+                GitAnalyzer._extract_methods(mod['old_path'], mod['old_src'], mod['repo_name']),
+                GitAnalyzer._extract_methods(mod['new_path'], mod['new_src'], mod['repo_name'])
             )
 
             for old_method, new_method in old_method_to_new.items():
@@ -197,55 +204,53 @@ class GitAnalyzer:
                     logger.info(f'Ignored files due to line limit: {mod["old_path"]} -> {mod["new_src"]}')
                     continue
 
-                with tempfile.NamedTemporaryFile(mode='w+t', suffix='.adb', delete=False) as t1, \
-                        tempfile.NamedTemporaryFile(mode='w+t', suffix='.adb', delete=False) as t2:
+                repo_info = RepoInfo(
+                    commit['repo']['name'],
+                    commit['repo']['path'],
+                    commit['repo']['url'],
+                    commit['hash'],
+                    commit['dtm'],
+                    mod['old_path'],
+                    mod['new_path'],
+                    old_method,
+                    new_method,
+                    author_email=commit['author']['email'] if commit.get('author') else None,
+                    author_name=commit['author']['name'] if commit.get('author') else None
+                )
 
-                    t1.writelines(old_method_src)
-                    t1.seek(0)
-                    t2.writelines(new_method_src)
-                    t2.seek(0)
+                try:
+                    cg = changegraph.build_from_trees(old_method.ast, new_method.ast, repo_info=repo_info)
+                except:
+                    logger.log(logger.ERROR,
+                               f'Unable to build a change graph for '
+                               f'repo={commit["repo"]["path"]}, '
+                               f'commit=#{commit["hash"]}, '
+                               f'method={old_method.full_name}, '
+                               f'line={old_method.ast.sloc_range}', exc_info=True, show_pid=True)
+                    continue
 
-                    repo_info = RepoInfo(
-                        commit['repo']['name'],
-                        commit['repo']['path'],
-                        commit['repo']['url'],
-                        commit['hash'],
-                        commit['dtm'],
-                        mod['old_path'],
-                        mod['new_path'],
-                        old_method,
-                        new_method,
-                        author_email=commit['author']['email'] if commit.get('author') else None,
-                        author_name=commit['author']['name'] if commit.get('author') else None
-                    )
+                change_graphs.append(cg)
 
-                    try:
-                        cg = changegraph.build_from_files(
-                            os.path.realpath(t1.name), os.path.realpath(t2.name), repo_info=repo_info)
-                    except:
-                        logger.log(logger.ERROR,
-                                   f'Unable to build a change graph for '
-                                   f'repo={commit["repo"]["path"]}, '
-                                   f'commit=#{commit["hash"]}, '
-                                   f'method={old_method.full_name}, '
-                                   f'line={old_method.ast.sloc_range}', exc_info=True, show_pid=True)
-                        continue
-
-                    change_graphs.append(cg)
-
-                    if len(change_graphs) >= GitAnalyzer.STORE_INTERVAL:
-                        GitAnalyzer._store_change_graphs(change_graphs)
-                        change_graphs.clear()
+                if len(change_graphs) >= GitAnalyzer.STORE_INTERVAL:
+                    GitAnalyzer._store_change_graphs(change_graphs)
+                    change_graphs.clear()
 
         if change_graphs:
             GitAnalyzer._store_change_graphs(change_graphs)
             change_graphs.clear()
 
     @staticmethod
-    def _extract_methods(file_path, src):
-        context = AnalysisContext()
-        unit = context.get_from_buffer(file_path, src)
-        methods: list[SubpBody] = unit.root.findall(lambda n: n.is_a(SubpBody))
+    def _extract_methods(file_path, src, repo_name):
+        project_path = os.path.join(GitAnalyzer.GIT_REPOSITORIES_DIR, repo_name)
+
+        if os.path.exists(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])):
+            unit_provider = lal.GPRProject(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])).create_unit_provider()
+            context = lal.AnalysisContext(unit_provider=unit_provider)
+        else:
+            context = lal.AnalysisContext()
+
+        unit = context.get_from_buffer(os.path.join(project_path, file_path), src)
+        methods: list[lal.SubpBody] = unit.root.findall(lambda n: isinstance(n, lal.SubpBody))
         return [Method(file_path, m.f_subp_spec.f_subp_name.text, m, src) for m in methods]
 
     @staticmethod
@@ -275,6 +280,7 @@ class Method:
     def __init__(self, path, name, ast, src):
         self.file_path = path
         self.ast = ast
+        self.source = ast.text
         self.src = src.strip()
 
         self.name = name
@@ -284,7 +290,15 @@ class Method:
         self.full_name = f'{prefix}{separator}{self.full_name}'
 
     def get_source(self):
-        return self.ast.text
+        return self.source
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['ast']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 
 class RepoInfo:

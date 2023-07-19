@@ -8,6 +8,7 @@ import vb_utils
 from treed.treed import TreedConstants
 from utils import ada_ast_util
 
+
 class Node:
     class Property:
         UNMAPPABLE = 'unmappable'
@@ -98,6 +99,7 @@ class DataNode(Node):
     class Kind:
         VARIABLE_DECL = 'variable-decl'
         VARIABLE_USAGE = 'variable-usage'
+        PACKAGE_USAGE = 'package-usage'
         SUBSCRIPT = 'subscript'
         SLICE = 'slice'
         LITERAL = 'literal'
@@ -159,40 +161,41 @@ class EmptyNode(StatementNode):
 class OperationNode(StatementNode):
     class Label:
         ALLOCATION = 'new'
-        DELTA = 'delta'
-        RETURN = 'return'
-        CONTINUE = 'continue'
-        EXIT = 'exit'
-        RAISE = 'raise'
-        NULL = 'null'
-        LAMBDA = 'lambda'
         ASSIGN = ':='
-        LISTCOMP = 'ListComprehension'
-        DICTCOMP = 'DictComprehension'
-        GENERATOREXPR = 'GeneratorExpression'
         COMPREHENSION = 'comprehension'
+        CONTINUE = 'continue'
+        DELTA = 'delta'
+        DEREFERENCE = 'all'
+        DICTCOMP = 'DictComprehension'
+        EXIT = 'exit'
+        GENERATOREXPR = 'GeneratorExpression'
+        LAMBDA = 'lambda'
+        LISTCOMP = 'ListComprehension'
+        NULL = 'null'
+        RAISE = 'raise'
+        RETURN = 'return'
 
     class Kind:
+        AGGREGATE = 'aggregate'
         ALLOCATION = 'allocation'
         ALTERNATIVES = 'alternatives'
-        AGGREGATE = 'aggregate'
-        ASSOCIATION = 'association'
-        COLLECTION = 'collection'
-        FUNC_CALL = 'func-call'
         ASSIGN = 'assignment'
-        AUG_ASSIGN = 'aug-assignment'
-        COMPARE = 'comparision'
-        RETURN = 'return'
-        RAISE = 'raise'
-        EXIT = 'exit'
-        CONTINUE = 'continue'
-        UNARY = 'unary'
-        BOOL = 'bool'
+        ASSOCIATION = 'association'
+        ATTRIBUTE_REF = 'attr-ref'
         BINARY = 'binary'
-        LISTCOMP = 'list-comp'
-        DICTCOMP = 'dict-comp'
+        BOOL = 'bool'
+        COLLECTION = 'collection'
+        COMPARE = 'comparision'
         COMPREHENSION = 'comprehension'
-        GENERATOREXPR = 'generator-expr'
+        CONTINUE = 'continue'
+        DEREFERENCE = 'dereference'
+        DICTCOMP = 'dict-comp'
+        EXIT = 'exit'
+        FUNC_CALL = 'func-call'
+        QUALIFIEDEXPR = 'qualified-expr'
+        RAISE = 'raise'
+        RETURN = 'return'
+        UNARY = 'unary'
         UNCLASSIFIED = 'unclassified'
 
     def __init__(self, label, ast, control_branch_stack, /, *, kind=None, key=None):
@@ -293,7 +296,6 @@ class ExtControlFlowGraph:
                 self.op_nodes.add(node)
 
         self.changed_nodes = set()
-        # self.gumtree = None
 
     def _resolve_refs(self, graph):
         resolved_refs = set()

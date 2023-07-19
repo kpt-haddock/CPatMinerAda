@@ -52,6 +52,7 @@ def main():
 
         fg = changegraph.build_from_files(args.src, args.dest)
         changegraph.export_graph_image(fg, args.output)
+        GitAnalyzer._store_change_graphs([fg])
     elif current_mode == RunModes.COLLECT_CHANGE_GRAPHS:
         GitAnalyzer().build_change_graphs(False)
 

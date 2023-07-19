@@ -1,5 +1,9 @@
 {
   "git_repositories_dir": "C:/repos",
+  "repos": {
+    "ada-synth-lib": "ada_synth_lib.gpr",
+    "septum": "septum.gpr"
+  },
   "change_graphs_storage_dir": "C:/ada_change_miner_out/change_graphs",
   "patterns_storage_dir": "C:/ada_change_miner_out/patterns",
 

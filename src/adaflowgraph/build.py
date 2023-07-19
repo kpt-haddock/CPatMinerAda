@@ -62,6 +62,16 @@ class GraphBuilder:
 
         root_node = unit.root
 
+        function_node = root_node.find(lambda n: isinstance(n, lal.SubpBody))
+
+        return self.build_from_tree(function_node, show_dependencies=show_dependencies, build_closure=build_closure)
+
+    def build_from_file(self, file_path, show_dependencies=False, build_closure=True):
+        with open(file_path, 'r') as f:
+            data = f.read()
+        return self.build_from_source(file_path, data, show_dependencies=show_dependencies, build_closure=build_closure)
+
+    def build_from_tree(self, node, show_dependencies=False, build_closure=True):
         log_level = settings.get('logger_file_log_level', 'INFO')
 
         if log_level != 'DEBUG':
@@ -69,22 +79,15 @@ class GraphBuilder:
         else:
             ada_node_visitor = AdaNodeVisitor()
 
-        function_node = root_node.find(lambda n: isinstance(n, lal.SubpBody))
-
-        fg = ada_node_visitor.visit(function_node)
+        graph = ada_node_visitor.visit(node)
 
         if not show_dependencies:
-            self.resolve_dependencies(fg)
+            self.resolve_dependencies(graph)
 
         if build_closure:
-            self.build_closure(fg)
+            self.build_closure(graph)
 
-        return fg
-
-    def build_from_file(self, file_path, show_dependencies=False, build_closure=True):
-        with open(file_path, 'r') as f:
-            data = f.read()
-        return self.build_from_source(file_path, data, show_dependencies=show_dependencies, build_closure=build_closure)
+        return graph
 
     @classmethod
     def _build_data_closure(cls, node, processed_nodes):
@@ -431,7 +434,18 @@ class AdaNodeVisitor(NodeVisitor):
         return graph
 
     def visit_AttributeRef(self, node: lal.AttributeRef):
-        raise NotImplementedError(node)
+        args_graph = self.visit(node.f_args)
+
+        name = get_node_short_name(node)
+        key = get_node_key(node)
+
+        op_node = OperationNode(name, node, self.control_branch_stack, kind=OperationNode.Kind.ATTRIBUTE_REF, key=key)
+        args_graph.add_node(op_node, link_type=LinkType.PARAMETER, clear_sinks=True)
+
+        graph = self.visit(node.f_prefix)
+        graph.merge_graph(args_graph, link_node=next(iter(args_graph.sinks)), link_type=LinkType.RECEIVER)
+
+        return graph
 
     def visit_BinOp(self, node: lal.BinOp):
         return self._visit_binop(node, node.f_left, node.f_right,
@@ -467,6 +481,11 @@ class AdaNodeVisitor(NodeVisitor):
         op_node = OperationNode(name, node, self.control_branch_stack, kind=OperationNode.Kind.FUNC_CALL, key=key)
 
         graph.add_node(op_node, link_type=LinkType.PARAMETER, clear_sinks=True)
+
+        if isinstance(node.f_name, lal.DottedName):
+            dotted_graph = self.visit(node.f_name)
+            dotted_graph.merge_graph(graph, link_node=next(iter(graph.sinks)), link_type=LinkType.RECEIVER)
+            return dotted_graph
         return graph
 
     def visit_CallStmt(self, node: lal.CallStmt):
@@ -518,7 +537,19 @@ class AdaNodeVisitor(NodeVisitor):
         raise NotImplementedError(node)
 
     def visit_DottedName(self, node: lal.DottedName):
-        raise NotImplementedError(node)
+        graph = self.visit(node.f_prefix)
+
+        suffix_name = get_node_full_name(node)
+        suffix_key = get_node_key(node)
+
+        if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
+            kind = DataNode.Kind.PACKAGE_USAGE
+        else:
+            kind = DataNode.Kind.VARIABLE_USAGE
+
+        data_node = DataNode(suffix_name, node, kind=kind, key=suffix_key)
+        graph.add_node(data_node, link_type=LinkType.QUALIFIER, clear_sinks=True)
+        return graph
 
     def visit_ExitStmt(self, node: lal.ExitStmt):
         if node.f_loop_name:
@@ -527,6 +558,12 @@ class AdaNodeVisitor(NodeVisitor):
         if not node.f_cond_expr:
             return self._visit_dep_resetter(OperationNode.Label.EXIT, node, OperationNode.Kind.EXIT)
 
+        raise NotImplementedError(node)
+
+    def visit_ExplicitDeref(self, node: lal.ExplicitDeref):
+        return self._visit_op(OperationNode.Label.DEREFERENCE, node, OperationNode.Kind.DEREFERENCE, [node.f_prefix])
+
+    def visit_ExprFunction(self, node: lal.ExprFunction):
         raise NotImplementedError(node)
 
     def visit_ExtendedReturnStmt(self, node: lal.ExtendedReturnStmt):
@@ -551,6 +588,9 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_ForLoopVarDecl(self, node: lal.ForLoopVarDecl):
         raise NotImplementedError(node)
 
+    def visit_GenericSubpInstantiation(self, node: lal.GenericSubpInstantiation):
+        raise NotImplementedError(node)  # TODO
+
     def visit_HandledStmts(self, node: lal.HandledStmts):
         return self.visit(node.f_stmts)
 
@@ -562,8 +602,11 @@ class AdaNodeVisitor(NodeVisitor):
             return self.create_graph(
                 node=DataNode(self._clear_literal_label(name), node, kind=DataNode.Kind.LITERAL))
 
-        if node.p_is_call:
-            raise NotImplementedError(node)
+        try:
+            if node.p_is_call:
+                return self.create_graph(node=OperationNode(name, node, self.control_branch_stack, kind=OperationNode.Kind.FUNC_CALL, key=key))
+        except:
+            logger.warning(f'Could not determine whether {node} is a call.')
 
         return self._visit_var_usage(node)
 
@@ -609,7 +652,10 @@ class AdaNodeVisitor(NodeVisitor):
         return graph
 
     def visit_OthersDesignator(self, node: lal.OthersDesignator):
-        raise NotImplementedError(node)
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
+
+    def visit_PackageDecl(self, node: lal.PackageDecl):
+        return self.create_graph()
 
     def visit_ParamAssoc(self, node: lal.ParamAssoc):
         if node.f_designator:
@@ -631,8 +677,11 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_ParenExpr(self, node: lal.ParenExpr):
         return self.visit(node.f_expr)
 
+    def visit_PragmaNode(self, node: lal.PragmaNode):
+        return self.create_graph()
+
     def visit_QualExpr(self, node: lal.QualExpr):
-        raise NotImplementedError(node)
+        return self._visit_op(node.f_prefix.text, node, OperationNode.Kind.QUALIFIEDEXPR, [node.f_suffix])
 
     def visit_RaiseStmt(self, node: lal.RaiseStmt):
         return self._visit_dep_resetter(OperationNode.Label.RAISE, node, OperationNode.Kind.RAISE,
@@ -669,8 +718,12 @@ class AdaNodeVisitor(NodeVisitor):
             return self.visit(node.f_subp_params)
         return []
 
+    def visit_SubtypeIndication(self, node: lal.SubtypeIndication):
+        raise NotImplementedError(node)  # TODO
+
     def visit_UnOp(self, node: lal.UnOp):
-        raise NotImplementedError
+        op_name = node.f_op.__class__.__name__[2:]
+        return self._visit_op(op_name, node, OperationNode.Kind.UNARY, [node.f_expr])
 
     def visit_UsePackageClause(self, node: lal.UsePackageClause):
         return self.create_graph()
@@ -731,10 +784,9 @@ class AdaNodeVisitor(NodeVisitor):
     # Return/continue/break
     def _visit_dep_resetter(self, label, node, kind, reset_variables=False):
         graph = self.create_graph()
-        if getattr(node, 'value', None):
-            graph.merge_graph(self.visit(node.value))
-        elif getattr(node, 'exc', None):
-            graph.merge_graph(self.visit(node.exc))
+
+        if getattr(node, 'f_return_expr', None):
+            graph.merge_graph(self.visit(node.f_return_expr))
 
         op_node = OperationNode(label, node, self.control_branch_stack, kind=kind)
 
@@ -743,8 +795,6 @@ class AdaNodeVisitor(NodeVisitor):
         graph.statement_sinks.clear()
         if reset_variables:
             self.context.remove_variables(self.control_branch_stack)
-
-        raise NotImplementedError('this is a direct copy from python-change-miner')
 
         return graph
 
@@ -808,5 +858,9 @@ class AdaNodeVisitor(NodeVisitor):
         var_name = get_node_full_name(node)
         var_key = get_node_key(node)
         graph = self.create_graph()
-        graph.add_node(DataNode(var_name, node, key=var_key, kind=DataNode.Kind.VARIABLE_USAGE))
+        if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
+            kind = DataNode.Kind.PACKAGE_USAGE
+        else:
+            kind = DataNode.Kind.VARIABLE_USAGE
+        graph.add_node(DataNode(var_name, node, key=var_key, kind=kind))
         return graph
