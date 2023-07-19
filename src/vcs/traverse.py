@@ -126,17 +126,20 @@ class GitAnalyzer:
             }
 
             for mod in commit.modified_files:
-                cut['modifications'].append({
-                    'type': mod.change_type,
+                try:
+                    cut['modifications'].append({
+                        'type': mod.change_type,
 
-                    'old_src': mod.source_code_before,
-                    'old_path': mod.old_path,
+                        'old_src': mod.source_code_before,
+                        'old_path': mod.old_path,
 
-                    'new_src': mod.source_code,
-                    'new_path': mod.new_path,
+                        'new_src': mod.source_code,
+                        'new_path': mod.new_path,
 
-                    'repo_name': repo_name
-                })
+                        'repo_name': repo_name
+                    })
+                except ValueError:
+                    logger.warning(f'Could not find commit {mod}')
 
             commits.append(cut)
 
@@ -243,11 +246,11 @@ class GitAnalyzer:
     def _extract_methods(file_path, src, repo_name):
         project_path = os.path.join(GitAnalyzer.GIT_REPOSITORIES_DIR, repo_name)
 
-        if os.path.exists(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])):
-            unit_provider = lal.GPRProject(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])).create_unit_provider()
-            context = lal.AnalysisContext(unit_provider=unit_provider)
-        else:
-            context = lal.AnalysisContext()
+        # if os.path.exists(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])):
+        #     unit_provider = lal.GPRProject(os.path.join(project_path, GitAnalyzer.GIT_REPOSITORIES[repo_name])).create_unit_provider()
+        #     context = lal.AnalysisContext(unit_provider=unit_provider)
+        # else:
+        context = lal.AnalysisContext()
 
         unit = context.get_from_buffer(os.path.join(project_path, file_path), src)
         methods: list[lal.SubpBody] = unit.root.findall(lambda n: isinstance(n, lal.SubpBody))
