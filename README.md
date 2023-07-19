@@ -32,6 +32,7 @@ sudo apt install python3 python3-pip
       ```
       cd libadalang_23.0.0_f27a5d00
       alr build
+      sudo find . -type f,l -name "*.so" -exec cp "{}" /usr/local/lib \;
       cd python
       pip install .
       ```
