@@ -36,6 +36,11 @@ sudo apt install python3 python3-pip
       cd python
       pip install .
       ```
+      * Add /usr/local/lib to your PATH environment variable
+      * Reload your environment
+      ```
+      sudo ldconfig
+      ```
 3. Configure the settings file
 
 ### Installing alr
