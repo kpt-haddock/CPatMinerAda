@@ -15,6 +15,10 @@ sudo apt install python3 python3-pip
     ```shell script
     pip install -r requirements.txt
     ```
+    * GraphViz
+    ```
+    sudo apt install graphviz
+    ```
     * Libadalang (install using alire):
         * Install gnat and gprbuild
         ```
