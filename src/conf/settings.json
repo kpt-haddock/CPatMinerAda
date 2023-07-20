@@ -1,14 +1,14 @@
 {
-  "git_repositories_dir": "C:/repos",
+  "git_repositories_dir": "/home/robin/repos",
   "repos": {
     "ada-synth-lib": "ada_synth_lib.gpr",
     "septum": "septum.gpr"
   },
-  "change_graphs_storage_dir": "C:/ada_change_miner_out/change_graphs",
-  "patterns_storage_dir": "C:/ada_change_miner_out/patterns",
+  "change_graphs_storage_dir": "/home/robin/ada_change_miner_out/change_graphs",
+  "patterns_storage_dir": "/home/robin/ada_change_miner_out/patterns",
 
   "traverse_file_max_line_count": 3000,
-  "traverse_async": false,
+  "traverse_async": true,
   "traverse_mmin_date": "",
 
   "logger_file_path": "miner.log",
