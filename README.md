@@ -17,7 +17,7 @@ git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
 2. Install the required dependencies:
     * Most dependencies of CPatMinerAda are easily installed by using the requirements.txt:
     ```shell script
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
     ```
     * GraphViz is required to generate PDF files for flow and change graphs:
     ```
@@ -49,22 +49,22 @@ git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
         ```shell script
         sudo find . -type f,l -name "*.so" -exec cp "{}" /usr/local/lib \;
         ```
+        Add /usr/local/lib to your path environment:
         ```shell script
-        
+        sudo vim /etc/environment
         ```
-      * Build & Install
-      ```
-      cd libadalang_23.0.0_f27a5d00
-      alr build
-      sudo find . -type f,l -name "*.so" -exec cp "{}" /usr/local/lib \;
-      cd python
-      pip install .
-      ```
-      * Add /usr/local/lib to your PATH environment variable
-      * Reload your environment
-      ```
-      sudo ldconfig
-      ```
+        Configure dynamic linker run-time bindings:
+        ```shell script
+        sudo ldconfig
+        ```
+        ```
+        cd python
+        pip3 install .
+        ```
+        Now run test_libadalang_installation.py to verify that the libadalang installation has been successful:
+        ```shell script
+        python3 test_libadalang_installation.py
+        ```
 3. Configure the settings file
 
 ### Installing alr
