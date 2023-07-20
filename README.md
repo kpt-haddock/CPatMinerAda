@@ -69,4 +69,43 @@ git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
 
 ### Installing alr
 
-## Extracting Change Graphs From Commits
+## How to use
+You can run any step of the pipeline by using the following command:
+```
+python3 src/main.py <mode> <args>
+```
+CPatMinerAda currently supports four operation modes:
+1. `afg` — build a program dependence graph from the Ada source.
+   Arguments
+   * `-i` — path to the source file.
+   * `-o` — path to the output file; two files are created, a DOT graph file and a graphviz-generated PDF file.
+   * `--no-closure` — **(optional)** no closure will be built for the graph.
+   * `--show-deps` — **(optional)** edges with type dep will be present in the graph, indicating the dependence of the vertices on each other.
+   * `--hide-op-kinds` — **(optional)** hide operation types.
+   * `--show-data-keys` — **(optional)** show variable IDs.
+   Typical use:
+   ```
+   python3 src/main.py afg -i src/examples/example.adb -o images/afg.dot
+   ```
+2. `cg` — build a change graph from two source files (before and after changes).
+   Arguments:
+   * `-s` — path to the source file before changes.
+   * `-d` — path to the source file after changes.
+   * `-o` — path to the output file; two files are created, a DOT graph file and a graphviz-generated PDF file.
+   Typical use:
+   ```
+   python3 src/main.py cg -s src/examples/0_old.adb -d src/examples/0_new.adb -o images/cg.dot
+   ```
+3. `collect-cgs` — mine change graphs from local repositories.
+   All general settings for this mode are located in the configuration JSON file (see part 3 of **Getting started**.
+   Use:
+   ```
+   python3 src/main.py collect-cgs
+   ```
+4. `patterns` — search for patterns in the generated change graphs.
+   All general settings for this mode are located in the configuration JSON file (see part 3 of **Getting started**.
+   
+   Use:
+   ```
+   python3 src/main.py patterns
+   ```
