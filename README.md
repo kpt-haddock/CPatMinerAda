@@ -28,8 +28,13 @@ git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
         ```
         sudo apt install gnat gprbuild
         ```
-        * Download [alire](https://alire.ada.dev/)
-        * Install alire following the [Getting Started](https://github.com/alire-project/alire/blob/master/doc/getting-started.md) instructions.
+        * Installing [ALIRE](https://alire.ada.dev/)
+           * Download [ALIRE](https://github.com/alire-project/alire/releases/download/v1.2.2/alr-1.2.2-bin-x86_64-linux.zip)
+           * Extract alr-1.2.2-bin-x86_64-linux.zip
+           * Copy alr to `/usr/local/bin`:
+           ```
+           sudo cp /alr-1.2.2-bin-x86_64-linux/bin/alr  /usr/local/bin/alr
+           ```
         * Download, build, and install libadalang and its dependencies:
         ```shell script
         alr get libadalang
