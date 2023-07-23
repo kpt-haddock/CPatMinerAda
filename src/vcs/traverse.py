@@ -16,6 +16,8 @@ from pydriller.domain.commit import ModificationType
 
 import settings
 import changegraph
+from utils.ada_node_id_mapper import AdaNodeIdMapper
+from utils.ada_node_visitor import accept
 
 
 class GitAnalyzer:
@@ -253,8 +255,13 @@ class GitAnalyzer:
         context = lal.AnalysisContext()
 
         unit = context.get_from_buffer(os.path.join(project_path, file_path), src)
-        methods: list[lal.SubpBody] = unit.root.findall(lambda n: isinstance(n, lal.SubpBody))
-        return [Method(file_path, m.f_subp_spec.f_subp_name.text, m, src) for m in methods]
+        ast = unit.root
+
+        id_mapper = AdaNodeIdMapper()
+        accept(ast, id_mapper)
+
+        methods: list[lal.SubpBody] = ast.findall(lambda n: isinstance(n, lal.SubpBody))
+        return [Method(file_path, m.f_subp_spec.f_subp_name.text, m, src, id_mapper.node_id[m]) for m in methods]
 
     @staticmethod
     def _set_unique_names(methods):
@@ -280,9 +287,10 @@ class GitAnalyzer:
 
 
 class Method:
-    def __init__(self, path, name, ast, src):
+    def __init__(self, path, name, ast, src, node_id):
         self.file_path = path
         self.ast = ast
+        self.ast_node_id = node_id
         self.source = ast.text
         self.src = src.strip()
 
@@ -302,6 +310,11 @@ class Method:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        id_mapper = AdaNodeIdMapper()
+        context = lal.AnalysisContext()
+        unit = context.get_from_buffer(self.file_path, self.src)
+        accept(unit.root, id_mapper)
+        self.ast = id_mapper.id_node[self.ast_node_id]
 
 
 class RepoInfo:
