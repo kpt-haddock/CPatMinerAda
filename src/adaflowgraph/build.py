@@ -536,6 +536,9 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_DeltaConstraint(self, node: lal.DeltaConstraint):
         raise NotImplementedError(node)
 
+    def visit_DiscreteSubtypeIndication(self, node: lal.DiscreteSubtypeIndication):
+        raise NotImplementedError(node)
+
     def visit_DottedName(self, node: lal.DottedName):
         graph = self.visit(node.f_prefix)
 
@@ -574,7 +577,7 @@ class AdaNodeVisitor(NodeVisitor):
             raise NotImplementedError(lal.ReversePresent)
         if node.f_iter_filter:
             raise NotImplementedError(node.f_iter_filter)
-        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr))
+        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr)) # TODO: I don't think this is right
 
     def visit_ForLoopStmt(self, node: lal.ForLoopStmt):
         control_node = ControlNode(ControlNode.Label.FOR, node, self.control_branch_stack)
@@ -611,7 +614,64 @@ class AdaNodeVisitor(NodeVisitor):
         return self._visit_var_usage(node)
 
     def visit_IfExpr(self, node: lal.IfExpr):
-        raise NotImplementedError(node)
+        control_node = ControlNode(ControlNode.Label.IF, node, self.control_branch_stack)
+        graph = self.visit(node.f_cond_expr)
+        graph.add_node(control_node, link_type=LinkType.CONDITION)
+
+        dummy_node = DataNode(node.__class__.__name__, node, kind=DataNode.Kind.DUMMY_USAGE)
+
+        then_graph = self._visit_control_expr(control_node, node.f_then_expr, True)
+
+        if len(node.f_alternatives):
+            else_graph = self._visit_alternatives_expr(control_node, node.f_alternatives.children, node.f_else_expr, False)
+        else:
+            else_graph = self._visit_control_expr(control_node, node.f_else_expr, False)
+
+        graph.parallel_merge_graphs([then_graph, else_graph])
+        graph.add_node(dummy_node, link_type=LinkType.REFERENCE)
+
+        return graph
+
+    def _visit_control_expr(self, control_node, expr, new_branch_kind, replace_control=False):
+        self._switch_control_branch(control_node, new_branch_kind, replace=replace_control)
+        dummy_node = DataNode(expr.__class__.__name__, expr, kind=DataNode.Kind.DUMMY_DECL)
+        graph = self.create_graph()
+        graph.add_node(EmptyNode(self.control_branch_stack))
+        expr_graph = self.visit(expr)
+        sink_nums = []
+        for sink in expr_graph.sinks:
+            sink.update_property(Node.Property.DEF_FOR, [dummy_node.statement_num])
+            sink_nums.append(sink.statement_num)
+        dummy_node.set_property(Node.Property.DEF_BY, sink_nums)
+        expr_graph.add_node(OperationNode(OperationNode.Label.ASSIGN, expr, self.control_branch_stack, kind=OperationNode.Kind.ASSIGN), link_type=LinkType.PARAMETER)
+        expr_graph.add_node(dummy_node, link_type=LinkType.DEFINITION)
+        graph.merge_graph(expr_graph)
+        self._pop_control_branch()
+        return expr_graph
+
+    def _visit_alternatives_expr(self, control_node, alternatives, else_expr, new_branch_kind, replace_control=False):
+        self._switch_control_branch(control_node, new_branch_kind, replace=replace_control)
+        alternative: lal.ElsifExprPart = alternatives[0]
+        remaining_alternatives: list[lal.ElsifExprPart] = alternatives[1:]
+
+        dummy_node = DataNode(alternative.__class__.__name__, alternative, kind=DataNode.Kind.DUMMY_USAGE)
+
+        graph = self.create_graph()
+        graph.add_node(EmptyNode(self.control_branch_stack))
+
+        alt_control_node = ControlNode(ControlNode.Label.IF, alternative, self.control_branch_stack)
+        conditional_graph = self.visit(alternative.f_cond_expr)
+        conditional_graph.add_node(alt_control_node, link_type=LinkType.CONDITION)
+        then_graph = self._visit_control_expr(alt_control_node, alternative.f_then_expr, True)
+        if len(remaining_alternatives):
+            else_graph = self._visit_alternatives_expr(alt_control_node, remaining_alternatives, else_expr, False)
+        else:
+            else_graph = self._visit_control_expr(alt_control_node, else_expr, False)
+        conditional_graph.parallel_merge_graphs([then_graph, else_graph])
+        conditional_graph.add_node(dummy_node, link_type=LinkType.REFERENCE)
+        graph.merge_graph(conditional_graph)
+        self._pop_control_branch()
+        return graph
 
     def visit_IfStmt(self, node: lal.IfStmt):
         control_node = ControlNode(ControlNode.Label.IF, node, self.control_branch_stack)
@@ -756,14 +816,14 @@ class AdaNodeVisitor(NodeVisitor):
         graph = self.create_graph()
         graph.add_node(EmptyNode(self.control_branch_stack))
 
-        control_node = ControlNode(ControlNode.Label.IF, alternative, self.control_branch_stack)
+        alt_control_node = ControlNode(ControlNode.Label.IF, alternative, self.control_branch_stack)
         conditional_graph = self.visit(alternative.f_cond_expr)
-        conditional_graph.add_node(control_node, link_type=LinkType.CONDITION)
-        then_graph = self._visit_control_node_body(control_node, alternative.f_stmts, True)
-        if remaining_alternatives:
-            else_graph = self._visit_alternatives(control_node, remaining_alternatives, else_stmts, False)
+        conditional_graph.add_node(alt_control_node, link_type=LinkType.CONDITION)
+        then_graph = self._visit_control_node_body(alt_control_node, alternative.f_stmts, True)
+        if len(remaining_alternatives):
+            else_graph = self._visit_alternatives(alt_control_node, remaining_alternatives, else_stmts, False)
         else:
-            else_graph = self._visit_control_node_body(control_node, else_stmts.children or [], False)
+            else_graph = self._visit_control_node_body(alt_control_node, else_stmts.children or [], False)
         conditional_graph.parallel_merge_graphs([then_graph, else_graph])
         graph.merge_graph(conditional_graph)
         self._pop_control_branch()

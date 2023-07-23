@@ -99,6 +99,8 @@ class DataNode(Node):
     class Kind:
         VARIABLE_DECL = 'variable-decl'
         VARIABLE_USAGE = 'variable-usage'
+        DUMMY_DECL = 'dummy-decl'
+        DUMMY_USAGE = 'dummy-usage'
         PACKAGE_USAGE = 'package-usage'
         SUBSCRIPT = 'subscript'
         SLICE = 'slice'
