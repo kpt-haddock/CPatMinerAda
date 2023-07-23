@@ -1,12 +1,15 @@
+import os
 import argparse
 import multiprocessing
+import pickle
 import sys
 
 import adaflowgraph
 import changegraph
 from log import logger
 from vcs.traverse import GitAnalyzer
-
+from patterns import Miner
+import settings
 
 class RunModes:
     BUILD_ADA_FLOW_GRAPH = 'afg'
@@ -55,6 +58,35 @@ def main():
         GitAnalyzer._store_change_graphs([fg])
     elif current_mode == RunModes.COLLECT_CHANGE_GRAPHS:
         GitAnalyzer().build_change_graphs(False)
+    elif current_mode == RunModes.MINE_PATTERNS:
+        storage_dir = settings.get('change_graphs_storage_dir')
+        file_names = os.listdir(storage_dir)
+        
+        logger.warning(f'Found {len(file_names)} files in storage directory.')
+
+        change_graphs = []
+        for file_num, file_name in enumerate(file_names):
+            file_path = os.path.join(storage_dir, file_name)
+            try:
+                with open(file_path, 'rb') as f:
+                    graphs = pickle.load(f)
+
+                for graph in graphs:
+                    change_graphs.append(pickle.loads(graph))
+            except:
+                logger.warning(f'Incorrect file {file_path}.')
+
+            logger.warning(f'Loaded [{1 + file_num}/{len(file_names)}] files.')
+        logger.warning('Pattern mining has started.')
+
+        miner = Miner()
+        try:
+            miner.mine_patterns(change_graphs)
+        except KeyboardInterrupt:
+            logger.warning('KeyboardInterrupt: mined patterns will be stored before exit.')
+        
+        miner.print_patterns()
+                
 
 
 if __name__ == '__main__':
