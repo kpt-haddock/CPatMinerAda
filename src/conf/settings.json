@@ -5,7 +5,7 @@
     "septum": "septum.gpr"
   },
   "change_graphs_storage_dir": "/home/robin/ada_change_miner_out/change_graphs",
-  "change_graphs_store_interval": 300,
+  "change_graphs_store_interval": 25,
 
   "patterns_output_dir": "/home/robin/ada_change_miner_out/patterns",
   "patterns_output_details": false,

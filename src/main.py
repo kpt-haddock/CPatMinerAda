@@ -57,7 +57,7 @@ def main():
         changegraph.export_graph_image(fg, args.output)
         GitAnalyzer._store_change_graphs([fg])
     elif current_mode == RunModes.COLLECT_CHANGE_GRAPHS:
-        GitAnalyzer().build_change_graphs(False)
+        GitAnalyzer().build_change_graphs()
     elif current_mode == RunModes.MINE_PATTERNS:
         storage_dir = settings.get('change_graphs_storage_dir')
         file_names = os.listdir(storage_dir)

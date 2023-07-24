@@ -3,7 +3,7 @@ from typing import Type
 from libadalang import AdaNode, _kind_to_astnode_cls, BinOp
 from multimethod import multimethod
 
-from treed.treed import TreedConstants
+from treed.treed import TreedConstants, TreedMapper
 
 
 @multimethod
@@ -16,12 +16,12 @@ def is_literal(node: AdaNode) -> bool:
     return node.__class__.__name__.endswith('Literal')
 
 
-def is_changed(node: AdaNode) -> bool:
+def is_changed(node: AdaNode, treed_map: TreedMapper) -> bool:
     if isinstance(node, BinOp):
-        return is_changed(node.f_op)
-    if node not in TreedConstants.PROPERTY_STATUS:
+        return is_changed(node.f_op, treed_map)
+    if node not in treed_map.property_status:
         return False
-    status: int = TreedConstants.PROPERTY_STATUS[node]
+    status: int = treed_map.property_status[node]
     if status > TreedConstants.STATUS_UNCHANGED:
         return True
     return False

@@ -719,7 +719,9 @@ class AdaNodeVisitor(NodeVisitor):
 
     def visit_ParamAssoc(self, node: lal.ParamAssoc):
         if node.f_designator:
-            raise NotImplementedError('designators not implemented')
+            return self._visit_binop(node, node.f_designator, node.f_r_expr,
+                                     op_name='=>',
+                                     op_kind=OperationNode.Kind.ASSOCIATION)
         return self.visit(node.f_r_expr)
 
     def visit_Params(self, node: lal.Params):
@@ -779,7 +781,12 @@ class AdaNodeVisitor(NodeVisitor):
         return []
 
     def visit_SubtypeIndication(self, node: lal.SubtypeIndication):
-        raise NotImplementedError(node)  # TODO
+        if node.f_constraint:
+            raise NotImplementedError(node.f_constraint)
+        if isinstance(node.f_has_not_null, lal.NotNullPresent):
+            raise NotImplementedError(node.f_has_not_null)
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.SUBTYPE_INDICATION))
+
 
     def visit_UnOp(self, node: lal.UnOp):
         op_name = node.f_op.__class__.__name__[2:]

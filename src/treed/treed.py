@@ -19,11 +19,6 @@ from log import logger
 
 
 class TreedConstants:
-    # PROPERTY_MAP: str = "m"
-    PROPERTY_MAP: dict[AdaNode, AdaNode] = {}
-    # PROPERTY_STATUS: str = "s"
-    PROPERTY_STATUS: dict[AdaNode, int] = {}
-
     GRAM_MAX_LENGTH: int = 2
     MIN_HEIGHT: int = 2
     MIN_SIMILARITY: float = 0.5
@@ -137,9 +132,9 @@ class PrintVisitor(AdaNodeVisitor):
 
     def pre_visit(self, node: AdaNode):
         self.print_indent()
-        status: int = TreedConstants.PROPERTY_STATUS.get(node)
+        status: int = self.treed_mapper.property_status.get(node)
         print('{}: {}'.format(TreedUtils.build_ast_label(node), self.treed_mapper.get_status(status)), end='')
-        m_n: AdaNode = TreedConstants.PROPERTY_MAP.get(node)
+        m_n: AdaNode = self.treed_mapper.property_map.get(node)
         if status > TreedConstants.STATUS_UNCHANGED and m_n is not None:
             print(' {}'.format(TreedUtils.build_ast_label(m_n)), end='')
         print('')
@@ -167,8 +162,10 @@ class TreedMapper:
     __number_of_unmaps: int
     __number_of_non_name_unmaps: int
     __visit_doc_tags: bool = False
+    property_map: dict[AdaNode, AdaNode]
+    property_status: dict[AdaNode, int]
 
-    def __init__(self, ast_m: AdaNode, ast_n: AdaNode):
+    def __init__(self, ast_m: AdaNode, ast_n: AdaNode, source_m, source_n):
         self.__tree = dict()
         self.__tree_height = dict()
         self.__tree_depth = dict()
@@ -185,6 +182,10 @@ class TreedMapper:
         self.__number_of_non_name_unmaps = 0
         self.__ast_m = ast_m
         self.__ast_n = ast_n
+        self.__lines_m = source_m.splitlines()
+        self.__lines_n = source_n.splitlines()
+        self.property_map = {}
+        self.property_status = {}
 
     def get_tree_map(self):
         return self.__tree_map
@@ -288,8 +289,8 @@ class TreedMapper:
         return False
 
     def __mark_unmapped(self, node: AdaNode):
-        if TreedConstants.PROPERTY_STATUS.get(node) is None:
-            TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_UNMAPPED
+        if self.property_status.get(node) is None:
+            self.property_status[node] = TreedConstants.STATUS_UNMAPPED
             self.__number_of_changes += 1
             self.__number_of_unmaps += 1
             # TODO: SimpleName in original
@@ -297,12 +298,12 @@ class TreedMapper:
                 self.__number_of_non_name_unmaps += 1
         # TODO: SimpleName in original
         elif node.is_a(Identifier):
-            mapped_node: Identifier = TreedConstants.PROPERTY_MAP.get(node)
+            mapped_node: Identifier = self.property_map.get(node)
             if mapped_node is not None and not self.__check_name_map(mapped_node, node):
-                TreedConstants.PROPERTY_MAP[node] = None
-                TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_UNMAPPED
-                TreedConstants.PROPERTY_MAP[mapped_node] = None
-                TreedConstants.PROPERTY_STATUS[mapped_node] = TreedConstants.STATUS_UNMAPPED
+                self.property_map[node] = None
+                self.property_status[node] = TreedConstants.STATUS_UNMAPPED
+                self.property_map[mapped_node] = None
+                self.property_status[mapped_node] = TreedConstants.STATUS_UNMAPPED
         children: list[AdaNode] = self.__tree.get(node)
         for child in children:
             self.__mark_unmapped(child)
@@ -311,7 +312,7 @@ class TreedMapper:
     def __mark_changes1(self, node: AdaNode):
         maps: dict[AdaNode, float] = self.__tree_map.get(node)
         if not maps:
-            TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_UNMAPPED
+            self.property_status[node] = TreedConstants.STATUS_UNMAPPED
             self.__number_of_changes += 1
             self.__number_of_unmaps += 1
             # TODO: identifier is SimpleName in original
@@ -319,23 +320,23 @@ class TreedMapper:
                 self.__number_of_non_name_unmaps += 1
         else:
             mapped_node: AdaNode = next(iter(maps.keys()))
-            TreedConstants.PROPERTY_MAP[node] = mapped_node
-            TreedConstants.PROPERTY_MAP[mapped_node] = node
+            self.property_map[node] = mapped_node
+            self.property_map[mapped_node] = node
             self.__update_name_map(node, mapped_node)
             if node == self.__ast_m:
-                TreedConstants.PROPERTY_STATUS[self.__ast_m] = TreedConstants.STATUS_UNCHANGED
-                TreedConstants.PROPERTY_STATUS[self.__ast_n] = TreedConstants.STATUS_UNCHANGED
+                self.property_status[self.__ast_m] = TreedConstants.STATUS_UNCHANGED
+                self.property_status[self.__ast_n] = TreedConstants.STATUS_UNCHANGED
             else:
                 p: AdaNode = node.parent
                 mp: AdaNode = mapped_node.parent
                 if mp not in self.__tree_map.get(p):
-                    TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_MOVED
-                    TreedConstants.PROPERTY_STATUS[mapped_node] = TreedConstants.STATUS_MOVED
+                    self.property_status[node] = TreedConstants.STATUS_MOVED
+                    self.property_status[mapped_node] = TreedConstants.STATUS_MOVED
                     self.__number_of_changes += 2
                 else:
-                    if TreedConstants.PROPERTY_STATUS.get(node) is None:
-                        TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_MOVED
-                        TreedConstants.PROPERTY_STATUS[mapped_node] = TreedConstants.STATUS_MOVED
+                    if self.property_status.get(node) is None:
+                        self.property_status[node] = TreedConstants.STATUS_MOVED
+                        self.property_status[mapped_node] = TreedConstants.STATUS_MOVED
                         self.__number_of_changes += 2
             # mark moving for children
             children: list[AdaNode] = self.__tree.get(node)
@@ -373,11 +374,11 @@ class TreedMapper:
                 node: AdaNode = nodes[i - 1]
                 node2: AdaNode = mapped_nodes[j - 1]
                 if TreedUtils.build_label_for_vector(node) == TreedUtils.build_label_for_vector(node2):
-                    TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_UNCHANGED
-                    TreedConstants.PROPERTY_STATUS[node2] = TreedConstants.STATUS_UNCHANGED
+                    self.property_status[node] = TreedConstants.STATUS_UNCHANGED
+                    self.property_status[node2] = TreedConstants.STATUS_UNCHANGED
                 else:
-                    TreedConstants.PROPERTY_STATUS[node] = TreedConstants.STATUS_RELABELED
-                    TreedConstants.PROPERTY_STATUS[node2] = TreedConstants.STATUS_RELABELED
+                    self.property_status[node] = TreedConstants.STATUS_RELABELED
+                    self.property_status[node2] = TreedConstants.STATUS_RELABELED
                     self.__number_of_changes += 2
                 i -= 1
                 j -= 1
@@ -563,9 +564,10 @@ class TreedMapper:
             self.__map(ancestors_m, ancestors_n, TreedConstants.MIN_SIMILARITY)
 
     @staticmethod
-    def __start_position(node: AdaNode) -> int:
-        lines: list[str] = node.unit.root.text.splitlines()
+    def __start_position(node: AdaNode, lines) -> int:
         start_position: int = 0
+        if node.sloc_range.start.line - 1 > len(lines):
+            print("that's weird!")
         for i in range(0, node.sloc_range.start.line - 1):
             start_position += len(lines[i])
         start_position += node.sloc_range.start.column
@@ -580,8 +582,8 @@ class TreedMapper:
                 similarity: float = self._compute_similarity(node_m, node_n, threshold)
                 if similarity >= threshold:
                     pair: Pair = Pair(node_m, node_n, similarity,
-                                      - abs((self.__start_position(node_m.parent) - self.__start_position(node_m)) -
-                                            (self.__start_position(node_n.parent) - self.__start_position(node_n))))
+                                      - abs((self.__start_position(node_m.parent, self.__lines_m) - self.__start_position(node_m, self.__lines_m)) -
+                                            (self.__start_position(node_n.parent, self.__lines_n) - self.__start_position(node_n, self.__lines_n))))
                     pairs1.add(pair)
                     pairs2: set[Pair] = pairs_of_ancestor.get(node_n, set())
                     pairs2.add(pair)
@@ -760,12 +762,12 @@ class TreedMapper:
                                         self.__set_map(child_m, child_n, TreedConstants.MIN_SIMILARITY)
                                         if TreedUtils.build_ast_label(child_m) == TreedUtils.build_ast_label(child_n):
                                             # TODO: Should this not be PROPERTY_STATUS?
-                                            TreedConstants.PROPERTY_MAP[child_m] = TreedConstants.STATUS_UNCHANGED
-                                            TreedConstants.PROPERTY_MAP[child_n] = TreedConstants.STATUS_UNCHANGED
+                                            self.property_map[child_m] = TreedConstants.STATUS_UNCHANGED
+                                            self.property_map[child_n] = TreedConstants.STATUS_UNCHANGED
                                         else:
                                             # TODO: Should this not be PROPERTY_STATUS?
-                                            TreedConstants.PROPERTY_MAP[child_m] = TreedConstants.STATUS_RELABELED
-                                            TreedConstants.PROPERTY_MAP[child_n] = TreedConstants.STATUS_RELABELED
+                                            self.property_map[child_m] = TreedConstants.STATUS_RELABELED
+                                            self.property_map[child_n] = TreedConstants.STATUS_RELABELED
                                 if similarity < TreedConstants.MIN_SIMILARITY:
                                     temp_m: list[AdaNode] = []
                                     temp_n: list[AdaNode] = []
@@ -807,8 +809,10 @@ class TreedMapper:
                 for i in range(0, len(mapped_nodes), 2):
                     mapped_node_m: AdaNode = mapped_nodes[i]
                     mapped_node_n: AdaNode = mapped_nodes[i+1]
-                    nodes_m.remove(mapped_node_m)
-                    nodes_n.remove(mapped_node_n)
+                    if mapped_node_m in nodes_m:
+                        nodes_m.remove(mapped_node_m)
+                    if mapped_node_n in nodes_n:
+                        nodes_n.remove(mapped_node_n)
                 maxs_m: list[AdaNode] = []
                 maxs_n: list[AdaNode] = []
                 max_height_m: int = self.__max_height(nodes_m, maxs_m)
@@ -825,8 +829,10 @@ class TreedMapper:
                 for i in range(0, len(mapped_nodes), 2):
                     mapped_node_m: AdaNode = mapped_nodes[i]
                     mapped_node_n: AdaNode = mapped_nodes[i+1]
-                    nodes_m.remove(mapped_node_m)
-                    nodes_n.remove(mapped_node_n)
+                    if mapped_node_m in nodes_m:
+                        nodes_m.remove(mapped_node_m)
+                    if mapped_node_n in nodes_n:
+                        nodes_n.remove(mapped_node_n)
         for child in children_m:
             self.__map_top_down(child)
 

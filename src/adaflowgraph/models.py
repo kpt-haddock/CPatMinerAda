@@ -5,7 +5,7 @@ from typing import Set
 from log import logger
 
 import vb_utils
-from treed.treed import TreedConstants
+from treed.treed import TreedMapper
 from utils import ada_ast_util
 
 
@@ -46,7 +46,6 @@ class Node:
         self.in_edges = set()  # todo: make protected some fields
         self.out_edges = set()
 
-        self.is_changed = False
         self.version = version
 
         self._data = {}
@@ -103,6 +102,7 @@ class DataNode(Node):
         DUMMY_USAGE = 'dummy-usage'
         PACKAGE_USAGE = 'package-usage'
         SUBSCRIPT = 'subscript'
+        SUBTYPE_INDICATION = 'subtype-indication'
         SLICE = 'slice'
         LITERAL = 'literal'
         KEYWORD = 'keyword'
@@ -417,14 +417,14 @@ class ExtControlFlowGraph:
                 control_nodes.append(node)
 
     @staticmethod
-    def map_by_treed_map(fg1, fg2, treed_map):
+    def map_by_treed_map(fg1, fg2, treed_map: TreedMapper):
         fg_dest_node_map = {}
         for fg_dest_node in fg2.nodes:
             if fg_dest_node.ast:
                 fg_dest_node_map[fg_dest_node.ast] = fg_dest_node
         for fg_src_node in fg1.nodes:
             if fg_src_node.ast:
-                mapped_ast = TreedConstants.PROPERTY_MAP.get(fg_src_node.ast, None)
+                mapped_ast = treed_map.property_map.get(fg_src_node.ast, None)
                 if mapped_ast:
                     fg_dest_node = fg_dest_node_map.get(mapped_ast)
                     if fg_dest_node:
@@ -434,14 +434,14 @@ class ExtControlFlowGraph:
                     else:
                         raise NotImplementedError
 
-    def _get_transitive_change_nodes(self):
+    def _get_transitive_change_nodes(self, treed_map):
         result = set()
         for node in self.changed_nodes:
             refs = node.get_outgoing_nodes(label=LinkType.REFERENCE)
             for ref in refs:
                 out_nodes = ref.get_outgoing_nodes()
                 for out_node in out_nodes:
-                    if out_node in self.changed_nodes and ada_ast_util.is_changed(node.ast):
+                    if out_node in self.changed_nodes and ada_ast_util.is_changed(node.ast, treed_map):
                         result.add(ref)
                         break
         return result
@@ -451,7 +451,7 @@ class ExtControlFlowGraph:
         result = node.get_definitions()
         return result
 
-    def calc_changed_nodes_by_treed_map(self):
+    def calc_changed_nodes_by_treed_map(self, treed_map):
         self.changed_nodes.clear()
 
         for node in self.nodes:
@@ -461,13 +461,13 @@ class ExtControlFlowGraph:
             if node.get_property(Node.Property.UNMAPPABLE):
                 continue
 
-            if ada_ast_util.is_changed(node.ast):
+            if ada_ast_util.is_changed(node.ast, treed_map):
                 self.changed_nodes.add(node)
 
                 deps = self._get_node_dependencies(node)
                 self.changed_nodes = self.changed_nodes.union(deps)
 
-        self.changed_nodes = self.changed_nodes.union(self._get_transitive_change_nodes())
+        self.changed_nodes = self.changed_nodes.union(self._get_transitive_change_nodes(treed_map))
 
     def find_node_by_label(self, label):
         for node in self.nodes:
