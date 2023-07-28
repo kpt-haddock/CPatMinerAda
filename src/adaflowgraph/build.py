@@ -447,6 +447,9 @@ class AdaNodeVisitor(NodeVisitor):
 
         return graph
 
+    def visit_BeginBlock(self, node: lal.BeginBlock):
+        return self.visit(node.f_stmts)
+
     def visit_BinOp(self, node: lal.BinOp):
         return self._visit_binop(node, node.f_left, node.f_right,
                                  op_name=node.f_op.__class__.__name__.lower()[2:],
