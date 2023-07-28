@@ -305,7 +305,7 @@ class Miner:
         repo_url = repo_info.repo_url.strip()[:-4]
         commit_hash = repo_info.commit_hash
 
-        line_number = repo_info.old_method.ast.lineno
+        line_number = repo_info.old_method.ast.sloc_range.start.line
 
         optional_links = ''
         if cls.FULL_PRINT:
@@ -409,7 +409,7 @@ class Miner:
 
         return f'<pre class="code language-python" ' \
                f'data-base-line-url="{cls._get_base_line_url(repo_info, version)}" ' \
-               f'data-line-number="{method.ast.lineno}" ' \
+               f'data-line-number="{method.ast.sloc_range}" ' \
                f'data-code-version="{version}">\n' \
                f'{cls._get_markup(fragment, src, version)}' \
                f'</pre>\n'
@@ -438,8 +438,9 @@ class Miner:
                     pattern_intervals.append(interval)
                 continue
 
-            start = node.ast.first_token.startpos
-            end = node.ast.last_token.endpos
+            # TODO
+            start = 0
+            end = 0
             pattern_intervals.append([start, end])
 
         pattern_intervals = cls.merge_intervals(pattern_intervals)

@@ -16,13 +16,15 @@ from pydriller.domain.commit import ModificationType
 
 import settings
 import changegraph
+from utils.ada_node_id_mapper import AdaNodeIdMapper
+from utils.ada_node_visitor import accept
 
 
 class GitAnalyzer:
     GIT_REPOSITORIES_DIR = settings.get('git_repositories_dir')
     GIT_REPOSITORIES = settings.get('repos')
     STORAGE_DIR = settings.get('change_graphs_storage_dir')
-    STORE_INTERVAL = settings.get('change_graphs_store_interval', 300)
+    STORE_INTERVAL = settings.get('change_graphs_store_interval', 50)
     TRAVERSE_ASYNC = settings.get('traverse_async', True)
 
     MIN_DATE = None
@@ -54,7 +56,7 @@ class GitAnalyzer:
         with open(self._data_file_dir, 'w+') as f:
             json.dump(self._data, f, indent=4)
 
-    def build_change_graphs(self, parse_only_tests=False):
+    def build_change_graphs(self):
         repo_names = [
             name for name in os.listdir(self.GIT_REPOSITORIES_DIR)
             if not name.startswith('_') and not name.startswith('.') and name not in self._data['visited']]
@@ -66,12 +68,14 @@ class GitAnalyzer:
         logger.warning(f'Found {len(repo_names)} repositories, starting a build process')
 
         if GitAnalyzer.TRAVERSE_ASYNC:
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=1000) as pool:
-                self._mine_changes(repo_names, pool=pool, parse_only_tests=parse_only_tests)
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=10) as pool:
+                self._mine_changes(repo_names, pool=pool)
+                pool.close()
+                pool.join()
         else:
-            self._mine_changes(repo_names, parse_only_tests=parse_only_tests)
+            self._mine_changes(repo_names)
 
-    def _mine_changes(self, repo_names, pool=None, parse_only_tests=False):
+    def _mine_changes(self, repo_names, pool=None):
         for repo_num, repo_name in enumerate(repo_names):
             logger.warning(f'Looking at repo {repo_name} [{repo_num + 1}/{len(repo_names)}]')
 
@@ -81,14 +85,14 @@ class GitAnalyzer:
             start = time.time()
             commits = self._extract_commits(repo_name)
 
-            if pool and len(commits) > 0:
+            if pool:
                 try:
-                    pool.starmap(self._build_and_store_change_graphs, zip(commits, [parse_only_tests] * len(commits)))
+                    pool.starmap(self._build_and_store_change_graphs, commits)
                 except:
                     logger.error(f'Pool.map failed for repo {repo_name}', exc_info=True)
             else:
                 for commit in commits:
-                    self._build_and_store_change_graphs(commit, parse_only_tests)
+                    self._build_and_store_change_graphs(commit)
 
             logger.warning(f'Done building change graphs for repo={repo_name} [{repo_num + 1}/{len(repo_names)}]',
                            start_time=start)
@@ -141,10 +145,9 @@ class GitAnalyzer:
                 except ValueError:
                     logger.warning(f'Could not find commit {mod}')
 
-            commits.append(cut)
-
-        logger.log(logger.WARNING, 'Commits extracted', start_time=start)
-        return commits
+            yield cut
+        # logger.log(logger.WARNING, 'Commits extracted', start_time=start)
+        # return commits
 
     @staticmethod
     def _get_repo_url(repo_path):
@@ -174,7 +177,7 @@ class GitAnalyzer:
         logger.info(f'Storing graphs to {filename} finished', show_pid=True)
 
     @staticmethod
-    def _build_and_store_change_graphs(commit, parse_only_tests=False):
+    def _build_and_store_change_graphs(commit):
         change_graphs = []
         commit_msg = commit['msg'].replace('\n', '; ')
         logger.info(f'Looking at commit #{commit["hash"]}, msg: "{commit_msg}"', show_pid=True)
@@ -185,10 +188,6 @@ class GitAnalyzer:
 
             if not all([mod['old_path'].endswith('.adb'), mod['new_path'].endswith('.adb')]):
                 continue
-
-            if parse_only_tests:
-                if mod['old_path'].find('test') == -1 and mod['new_path'].find('test') == -1:
-                    continue
 
             old_method_to_new = GitAnalyzer._get_methods_mapping(
                 GitAnalyzer._extract_methods(mod['old_path'], mod['old_src'], mod['repo_name']),
@@ -222,7 +221,7 @@ class GitAnalyzer:
                 )
 
                 try:
-                    cg = changegraph.build_from_trees(old_method.ast, new_method.ast, repo_info=repo_info)
+                    cg = changegraph.build_from_trees(old_method.ast, new_method.ast, old_method.src, new_method.src, repo_info=repo_info)
                 except:
                     logger.log(logger.ERROR,
                                f'Unable to build a change graph for '
@@ -253,8 +252,13 @@ class GitAnalyzer:
         context = lal.AnalysisContext()
 
         unit = context.get_from_buffer(os.path.join(project_path, file_path), src)
-        methods: list[lal.SubpBody] = unit.root.findall(lambda n: isinstance(n, lal.SubpBody))
-        return [Method(file_path, m.f_subp_spec.f_subp_name.text, m, src) for m in methods]
+        ast = unit.root
+
+        id_mapper = AdaNodeIdMapper()
+        accept(ast, id_mapper)
+
+        methods: list[lal.SubpBody] = ast.findall(lambda n: isinstance(n, lal.SubpBody))
+        return [Method(file_path, m.f_subp_spec.f_subp_name.text, m, src, id_mapper.node_id[m]) for m in methods if m.f_subp_spec.f_subp_name is not None]
 
     @staticmethod
     def _set_unique_names(methods):
@@ -280,11 +284,12 @@ class GitAnalyzer:
 
 
 class Method:
-    def __init__(self, path, name, ast, src):
+    def __init__(self, path, name, ast, src, node_id):
         self.file_path = path
         self.ast = ast
+        self.ast_node_id = node_id
         self.source = ast.text
-        self.src = src.strip()
+        self.src = src
 
         self.name = name
         self.full_name = name
@@ -302,6 +307,11 @@ class Method:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        id_mapper = AdaNodeIdMapper()
+        context = lal.AnalysisContext()
+        unit = context.get_from_buffer(self.file_path, self.src)
+        accept(unit.root, id_mapper)
+        self.ast = id_mapper.id_node[self.ast_node_id]
 
 
 class RepoInfo:

@@ -4,9 +4,10 @@ from overrides import overrides
 
 
 class AdaNodeIdMapper(AdaNodeVisitor):
-    node_id = {}
-    id_node = {}
-    cnt = 1
+    def __init__(self):
+        self.node_id = {}
+        self.id_node = {}
+        self.cnt = 1
 
     @overrides
     def pre_visit(self, node: lal.AdaNode):

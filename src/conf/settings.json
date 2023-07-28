@@ -5,10 +5,20 @@
     "septum": "septum.gpr"
   },
   "change_graphs_storage_dir": "/home/robin/ada_change_miner_out/change_graphs",
-  "patterns_storage_dir": "/home/robin/ada_change_miner_out/patterns",
+  "change_graphs_store_interval": 25,
+
+  "patterns_output_dir": "/home/robin/ada_change_miner_out/patterns",
+  "patterns_output_details": false,
+
+  "patterns_min_frequency": 3,
+  "patterns_max_frequency": 1000,
+  "patterns_async_mining": false,
+  "patterns_full_print": false,
+  "patterns_hide_overlapped_fragments": true,
+  "patterns_min_size": 3,
 
   "traverse_file_max_line_count": 3000,
-  "traverse_async": true,
+  "traverse_async": false,
   "traverse_mmin_date": "",
 
   "logger_file_path": "miner.log",
