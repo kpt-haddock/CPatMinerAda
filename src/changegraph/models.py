@@ -15,21 +15,21 @@ class ChangeGraph:
     def __setstate__(self, state):
         self.__dict__.update(state)
 
-        id_mapper = AdaNodeIdMapper()
+        # id_mapper = AdaNodeIdMapper()
 
-        context = lal.AnalysisContext()
-        before_unit = context.get_from_buffer('before.adb', self.before_text)
-        before_root = before_unit.root.find(lambda n: isinstance(n, lal.SubpBody))
-        accept(before_root, id_mapper)
-
-        context = lal.AnalysisContext()
-        after_unit = context.get_from_buffer('after.adb', self.after_text)
-        after_root = after_unit.root.find(lambda n: isinstance(n, lal.SubpBody))
-        accept(after_root, id_mapper)
-
-        for node in self.nodes:
-            node.ast = id_mapper.id_node[node.ast_node_id]
-            assert node.text == node.ast.text
+        # context = lal.AnalysisContext()
+        # before_unit = context.get_from_buffer('before.adb', self.before_text)
+        # before_root = before_unit.root.find(lambda n: isinstance(n, lal.SubpBody))
+        # accept(before_root, id_mapper)
+        #
+        # context = lal.AnalysisContext()
+        # after_unit = context.get_from_buffer('after.adb', self.after_text)
+        # after_root = after_unit.root.find(lambda n: isinstance(n, lal.SubpBody))
+        # accept(after_root, id_mapper)
+        #
+        # for node in self.nodes:
+        #     node.ast = id_mapper.id_node[node.ast_node_id]
+        #     assert node.text == node.ast.text
 
 
 class ChangeNode:  # todo: create base class for pfg and cg

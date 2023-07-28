@@ -23,7 +23,7 @@ class ChangeGraphBuilder:  # TODO: make gumtree optional
         start = time.time()
         treed_map = TreedMapper(fg1.entry_node.ast, fg2.entry_node.ast)
         treed_map.map()
-        logger.warning('Gumtree... OK', start_time=start, show_pid=True)
+        logger.warning('Treed mapping... OK', start_time=start, show_pid=True)
 
         # for node in gt1.nodes:
         #     if node.mapped:
@@ -32,7 +32,7 @@ class ChangeGraphBuilder:  # TODO: make gumtree optional
         start = time.time()
 
         ExtControlFlowGraph.map_by_treed_map(fg1, fg2, treed_map)
-        logger.warning('Mapping... OK', start_time=start, show_pid=True)
+        logger.warning('fgPDG mapping... OK', start_time=start, show_pid=True)
 
         for node in fg1.nodes:
             if node.mapped:
