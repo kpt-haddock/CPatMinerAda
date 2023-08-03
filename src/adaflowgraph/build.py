@@ -1,9 +1,10 @@
 import html
+import logging
+
 import libadalang as lal
 
 import settings
 from log import logger
-from adaflowgraph import models
 from adaflowgraph.models import Node, DataNode, OperationNode, ExtControlFlowGraph, ControlNode, DataEdge, LinkType, \
     EntryNode, EmptyNode, ControlEdge, StatementNode
 from .ast_utils import get_node_key, get_node_short_name, get_node_full_name
@@ -790,7 +791,6 @@ class AdaNodeVisitor(NodeVisitor):
             raise NotImplementedError(node.f_has_not_null)
         return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.SUBTYPE_INDICATION))
 
-
     def visit_UnOp(self, node: lal.UnOp):
         op_name = node.f_op.__class__.__name__[2:]
         return self._visit_op(op_name, node, OperationNode.Kind.UNARY, [node.f_expr])
@@ -928,9 +928,13 @@ class AdaNodeVisitor(NodeVisitor):
         var_name = get_node_full_name(node)
         var_key = get_node_key(node)
         graph = self.create_graph()
-        if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
-            kind = DataNode.Kind.PACKAGE_USAGE
-        else:
+        try:
+            if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
+                kind = DataNode.Kind.PACKAGE_USAGE
+            else:
+                kind = DataNode.Kind.VARIABLE_USAGE
+        except:
+            logging.debug('Could not determine first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE
         graph.add_node(DataNode(var_name, node, key=var_key, kind=kind))
         return graph

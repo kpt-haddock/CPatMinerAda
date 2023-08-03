@@ -95,7 +95,8 @@ class ChangeNode:  # todo: create base class for pfg and cg
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['ast']
+        if 'ast' in state:
+            del state['ast']
         return state
 
     def __setstate__(self, state):

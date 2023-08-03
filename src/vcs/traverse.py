@@ -68,10 +68,8 @@ class GitAnalyzer:
         logger.warning(f'Found {len(repo_names)} repositories, starting a build process')
 
         if GitAnalyzer.TRAVERSE_ASYNC:
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=10) as pool:
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=1000) as pool:
                 self._mine_changes(repo_names, pool=pool)
-                pool.close()
-                pool.join()
         else:
             self._mine_changes(repo_names)
 
@@ -87,7 +85,7 @@ class GitAnalyzer:
 
             if pool:
                 try:
-                    pool.starmap(self._build_and_store_change_graphs, commits)
+                    pool.map(self._build_and_store_change_graphs, commits)
                 except:
                     logger.error(f'Pool.map failed for repo {repo_name}', exc_info=True)
             else:
@@ -302,16 +300,21 @@ class Method:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['ast']
+        if 'ast' in state:
+            del state['ast']
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        id_mapper = AdaNodeIdMapper()
-        context = lal.AnalysisContext()
-        unit = context.get_from_buffer(self.file_path, self.src)
-        accept(unit.root, id_mapper)
-        self.ast = id_mapper.id_node[self.ast_node_id]
+
+    def get_ast(self):
+        if not hasattr(self, 'ast'):
+            id_mapper = AdaNodeIdMapper()
+            context = lal.AnalysisContext()
+            unit = context.get_from_buffer(self.file_path, self.src)
+            accept(unit.root, id_mapper)
+            self.ast = id_mapper.id_node[self.ast_node_id]
+        return self.ast
 
 
 class RepoInfo:

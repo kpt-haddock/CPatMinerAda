@@ -18,6 +18,10 @@ from patterns.models import Fragment, Pattern
 
 
 class Miner:
+    graph_count = 0
+    min_date_skip_count = 0
+    min_frequency_skip_count = 0
+
     OUTPUT_DIR = settings.get('patterns_output_dir')
     OUTPUT_DETAILS = settings.get('patterns_output_details')
     FULL_PRINT = settings.get('patterns_full_print', False)
@@ -54,7 +58,11 @@ class Miner:
 
         label_to_node_pairs = {}
         for graph in graphs:
+            self.graph_count += 1
+            print(f'graph count: {self.graph_count}')
             if self.MIN_DATE and graph.repo_info.commit_dtm < self.MIN_DATE:
+                self.min_date_skip_count += 1
+                print(f'min date skip count: {self.min_date_skip_count}')
                 continue
 
             for node in graph.nodes:
@@ -76,7 +84,8 @@ class Miner:
             logger.warning(f'Looking at node pair #{num + 1}')
 
             if len(pairs) < Pattern.MIN_FREQUENCY:
-                logger.warning('Skipping...')
+                self.min_frequency_skip_count += 1
+                logger.warning(f'Skipping... (min frequency skip count {self.min_frequency_skip_count})')
                 continue
 
             fragments = set([Fragment.create_from_node_pair(pair) for pair in pairs])
@@ -305,7 +314,7 @@ class Miner:
         repo_url = repo_info.repo_url.strip()[:-4]
         commit_hash = repo_info.commit_hash
 
-        line_number = repo_info.old_method.ast.sloc_range.start.line
+        line_number = repo_info.old_method.get_ast().sloc_range.start.line
 
         optional_links = ''
         if cls.FULL_PRINT:
