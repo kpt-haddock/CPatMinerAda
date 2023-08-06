@@ -4,7 +4,7 @@ from log import logger
 import adaflowgraph
 from changegraph.models import ChangeNode, ChangeGraph, ChangeEdge
 from adaflowgraph.models import ExtControlFlowGraph, Node
-from treed.treed import TreedMapper
+from gumtree import GumTree
 from utils import ada_ast_util
 from utils.ada_node_id_mapper import AdaNodeIdMapper
 from utils.ada_node_visitor import accept
@@ -22,23 +22,22 @@ class ChangeGraphBuilder:
 
         with open(path1, 'r') as src1, open(path2, 'r') as src2:
             start = time.time()
-            treed_map = TreedMapper(fg1.entry_node.ast, fg2.entry_node.ast, src1.read(), src2.read())
-            treed_map.map()
-            logger.warning('Treed mapping... OK', start_time=start, show_pid=True)
+            gumtree = GumTree(fg1.entry_node.ast, src1.read(), fg2.entry_node.ast, src2.read())
+            logger.warning('GumTree mapping... OK', start_time=start, show_pid=True)
 
             start = time.time()
 
-            ExtControlFlowGraph.map_by_treed_map(fg1, fg2, treed_map)
+            ExtControlFlowGraph.map_by_gumtree(fg1, fg2, gumtree)
             logger.warning('fgPDG mapping... OK', start_time=start, show_pid=True)
 
             for node in fg1.nodes:
                 if node.mapped:
                     logger.log(logger.INFO, f'FG node {node} mapped to {node.mapped}, '
-                                            f'and is_changed={ada_ast_util.is_changed(node.ast, treed_map)}', show_pid=True)
+                                            f'and is_changed={gumtree.is_node_changed(node.ast)}', show_pid=True)
 
             for node in fg2.nodes:
                 node.version = Node.Version.AFTER_CHANGES
-            cg = self._create_change_graph(fg1, fg2, treed_map, repo_info=repo_info)
+            cg = self._create_change_graph(fg1, fg2, gumtree, repo_info=repo_info)
             logger.warning('Change graph building... OK', start_time=start_building, show_pid=True)
 
             for node in cg.nodes:
@@ -56,23 +55,22 @@ class ChangeGraphBuilder:
         logger.warning('Flow graphs... OK', start_time=start, show_pid=True)
 
         start = time.time()
-        treed_map = TreedMapper(fg1.entry_node.ast, fg2.entry_node.ast, src1, src2)
-        treed_map.map()
+        gumtree = GumTree(fg1.entry_node.ast, src1, fg2.entry_node.ast, src2)
         logger.warning('Gumtree... OK', start_time=start, show_pid=True)
 
         start = time.time()
 
-        ExtControlFlowGraph.map_by_treed_map(fg1, fg2, treed_map)
+        ExtControlFlowGraph.map_by_gumtree(fg1, fg2, gumtree)
         logger.warning('Mapping... OK', start_time=start, show_pid=True)
 
         for node in fg1.nodes:
             if node.mapped:
                 logger.log(logger.INFO, f'FG node {node} mapped to {node.mapped}, '
-                                        f'and is_changed={ada_ast_util.is_changed(node.ast, treed_map)}', show_pid=True)
+                                        f'and is_changed={gumtree.is_node_changed(node.ast)}', show_pid=True)
 
         for node in fg2.nodes:
             node.version = Node.Version.AFTER_CHANGES
-        cg = self._create_change_graph(fg1, fg2, treed_map, repo_info=repo_info)
+        cg = self._create_change_graph(fg1, fg2, gumtree, repo_info=repo_info)
         logger.warning('Change graph building... OK', start_time=start_building, show_pid=True)
 
         for node in cg.nodes:
@@ -81,9 +79,9 @@ class ChangeGraphBuilder:
         return cg
 
     @staticmethod
-    def _create_change_graph(fg1, fg2, treed_map, repo_info=None):
-        fg1.calc_changed_nodes_by_treed_map(treed_map)
-        fg2.calc_changed_nodes_by_treed_map(treed_map)
+    def _create_change_graph(fg1, fg2, gumtree, repo_info=None):
+        fg1.calc_changed_nodes_by_gumtree(gumtree)
+        fg2.calc_changed_nodes_by_gumtree(gumtree)
 
         fg_changed_nodes = fg1.changed_nodes.union(fg2.changed_nodes)
         fg_node_to_cg_node = {}
