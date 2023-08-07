@@ -121,7 +121,7 @@ class ChawatheScriptGenerator:
                     a.parent.children.remove(a)
                     k = self.find_pos(b)
                     mv = Move(self.copy_to_orig[a], self.copy_to_orig[w], k)
-                    self.actions.append(mv)
+                    self.actions.add(mv)
                     w.children.insert(k, a)
                     a.parent = w
                     self.src_in_order.add(a)
