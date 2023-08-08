@@ -28,6 +28,7 @@ class ChangeGraphBuilder:
             start = time.time()
 
             ExtControlFlowGraph.map_by_gumtree(fg1, fg2, gumtree)
+            ExtControlFlowGraph.absolute_position_by_gumtree(fg1, fg2, gumtree)
             logger.warning('fgPDG mapping... OK', start_time=start, show_pid=True)
 
             for node in fg1.nodes:
@@ -61,6 +62,7 @@ class ChangeGraphBuilder:
         start = time.time()
 
         ExtControlFlowGraph.map_by_gumtree(fg1, fg2, gumtree)
+        ExtControlFlowGraph.absolute_position_by_gumtree(fg1, fg2, gumtree)
         logger.warning('Mapping... OK', start_time=start, show_pid=True)
 
         for node in fg1.nodes:
