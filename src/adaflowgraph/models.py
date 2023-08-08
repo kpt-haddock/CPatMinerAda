@@ -438,6 +438,17 @@ class ExtControlFlowGraph:
                         fg_src_node.create_edge(fg_dest_node, LinkType.MAP)
 
     @staticmethod
+    def absolute_position_by_gumtree(fg1, fg2, gumtree: GumTree):
+        for node in fg1.nodes:
+            gumtree_node = gumtree.diff.src.trees[node.ast]
+            node.start_pos = gumtree_node.pos
+            node.end_pos = node.start_pos + gumtree_node.length
+        for node in fg2.nodes:
+            gumtree_node = gumtree.diff.dst.trees[node.ast]
+            node.start_pos = gumtree_node.pos
+            node.end_pos = node.start_pos + gumtree_node.length
+
+    @staticmethod
     def map_by_treed_map(fg1, fg2, treed_map: TreedMapper):
         fg_dest_node_map = {}
         for fg_dest_node in fg2.nodes:
