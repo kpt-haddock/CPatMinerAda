@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import pickle
 import multiprocessing
@@ -178,6 +179,7 @@ class GitAnalyzer:
 
     @staticmethod
     def _build_and_store_change_graphs(commit):
+        sys.setrecursionlimit(2**31-1)
         change_graphs = []
         commit_msg = commit['msg'].replace('\n', '; ')
         logger.info(f'Looking at commit #{commit["hash"]}, msg: "{commit_msg}"', show_pid=True)
