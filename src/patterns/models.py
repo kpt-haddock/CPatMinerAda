@@ -1,4 +1,5 @@
 import copy
+import sys
 import time
 import multiprocessing
 import functools
@@ -446,6 +447,7 @@ class Pattern:
         return freq_group, freq
 
     def _get_most_freq_group_and_freq_in_label(self, labels_cnt, data):
+        sys.setrecursionlimit(10000)
         label_index, (label, fragment_to_ext_list) = data
 
         ext_fragments = set()
