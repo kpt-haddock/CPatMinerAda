@@ -157,6 +157,8 @@ class GitAnalyzer:
     def _store_change_graphs(graphs):
         pickled_graphs = []
         for graph in graphs:
+            if len(graph.nodes) == 0:
+                continue
             if graph.repo_info and graph.repo_info.repo_name:
                 changegraph.export_graph_image(graph, os.path.join(GitAnalyzer.STORAGE_DIR,
                                                                    graph.repo_info.repo_name,
