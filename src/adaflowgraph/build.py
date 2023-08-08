@@ -703,6 +703,10 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_LoopStmt(self, node: lal.LoopStmt):
         raise NotImplementedError(node)
 
+    def visit_NamedStmt(self, node: lal.NamedStmt):
+        # TODO: label?
+        return self.visit(node.f_stmt)
+
     def visit_NullLiteral(self, node: lal.NullLiteral):
         return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
 
