@@ -53,9 +53,6 @@ class Miner:
             raise NotImplementedError
 
     def _mine(self, graphs):
-        # TODO: delete assign nodes?
-        # TODO: collapse literals?
-
         label_to_node_pairs = {}
         for graph in graphs:
             self.graph_count += 1
@@ -447,9 +444,8 @@ class Miner:
                     pattern_intervals.append(interval)
                 continue
 
-            # TODO
-            start = 0
-            end = 0
+            start = node.start_pos
+            end = node.end_pos
             pattern_intervals.append([start, end])
 
         pattern_intervals = cls.merge_intervals(pattern_intervals)
