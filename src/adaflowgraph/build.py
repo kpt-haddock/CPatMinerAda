@@ -759,6 +759,33 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_QualExpr(self, node: lal.QualExpr):
         return self._visit_op(node.f_prefix.text, node, OperationNode.Kind.QUALIFIEDEXPR, [node.f_suffix])
 
+    def visit_QuantifiedExpr(self, node: lal.QuantifiedExpr):
+        self._switch_context(self.context.get_fork())
+        op_node = OperationNode(OperationNode.Label.QUANTIFIEDEXPR, node, self.control_branch_stack,
+                                kind=OperationNode.Kind.QUANTIFIEDEXPR)
+        
+        quantifier = self.visit(node.f_quantifier)
+        quantifier.add_node(op_node, link_type=LinkType.PARAMETER)
+
+        loop_spec = self.visit(node.f_loop_spec)
+
+        expr = self.visit(node.f_expr)
+        expr.add_node(op_node, link_type=LinkType.PARAMETER)
+
+        loop_spec.merge_graph(expr)
+
+        graph = self.create_graph()
+        graph.parallel_merge_graphs([quantifier, loop_spec])
+        self._pop_context()
+        return graph
+
+    def visit_QuantifierAll(self, node: lal.QuantifierAll):
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.QUANTIFIER))
+
+    def visit_QuantifierSome(self, node: lal.QuantifierSome):
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.QUANTIFIER))
+
+
     def visit_RaiseStmt(self, node: lal.RaiseStmt):
         return self._visit_dep_resetter(OperationNode.Label.RAISE, node, OperationNode.Kind.RAISE,
                                         reset_variables=True)

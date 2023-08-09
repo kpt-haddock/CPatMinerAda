@@ -107,6 +107,7 @@ class DataNode(Node):
         SLICE = 'slice'
         LITERAL = 'literal'
         KEYWORD = 'keyword'
+        QUANTIFIER = 'quantifier'
         UNDEFINED = 'undefined'
 
     def __init__(self, label, ast, /, *, key=None, kind=None):
@@ -175,6 +176,7 @@ class OperationNode(StatementNode):
         LAMBDA = 'lambda'
         LISTCOMP = 'ListComprehension'
         NULL = 'null'
+        QUANTIFIEDEXPR = 'QuantifiedExpr'
         RAISE = 'raise'
         RETURN = 'return'
 
@@ -196,6 +198,7 @@ class OperationNode(StatementNode):
         EXIT = 'exit'
         FUNC_CALL = 'func-call'
         QUALIFIEDEXPR = 'qualified-expr'
+        QUANTIFIEDEXPR = 'quantified-expr'
         RAISE = 'raise'
         RETURN = 'return'
         UNARY = 'unary'
