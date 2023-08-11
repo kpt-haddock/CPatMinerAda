@@ -6,8 +6,6 @@ from gumtree import GumTree
 from log import logger
 
 import vb_utils
-from treed.treed import TreedMapper
-from utils import ada_ast_util
 
 
 class Node:
@@ -450,24 +448,6 @@ class ExtControlFlowGraph:
             gumtree_node = gumtree.diff.dst.trees[node.ast]
             node.start_pos = gumtree_node.pos
             node.end_pos = node.start_pos + gumtree_node.length
-
-    @staticmethod
-    def map_by_treed_map(fg1, fg2, treed_map: TreedMapper):
-        fg_dest_node_map = {}
-        for fg_dest_node in fg2.nodes:
-            if fg_dest_node.ast:
-                fg_dest_node_map[fg_dest_node.ast] = fg_dest_node
-        for fg_src_node in fg1.nodes:
-            if fg_src_node.ast:
-                mapped_ast = treed_map.property_map.get(fg_src_node.ast, None)
-                if mapped_ast:
-                    fg_dest_node = fg_dest_node_map.get(mapped_ast)
-                    if fg_dest_node:
-                        fg_src_node.mapped = fg_dest_node
-                        fg_dest_node.mapped = fg_src_node
-                        fg_src_node.create_edge(fg_dest_node, LinkType.MAP)
-                    else:
-                        raise NotImplementedError
 
     def _get_transitive_change_nodes(self, gumtree):
         result = set()
