@@ -2,17 +2,17 @@
 
 CPatMiner port for the Ada programming language.
 
-CPatMiner is a graph-based mining approach for detecting repetitive fine-grained semantic code change patterns.
+[CPatMiner](https://github.com/nguyenhoan/CPatMiner) is a graph-based mining approach for detecting repetitive fine-grained semantic code change patterns.
 
 ## Getting started (Linux instructions)
 
-0. The tool requires Python 3.10+ to run. We have tested it only on Linux and Windows systems.
+0. The tool requires Python 3.9 or 3.10 to run. We have tested it only on Linux and Windows systems.
 ```
 sudo apt install python3 python3-pip
 ```
 1. Clone this repository
 ```shell script
-git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
+git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAda
 ```
 2. Install the required dependencies:
     * Most dependencies of CPatMinerAda are easily installed by using the requirements.txt:
@@ -72,7 +72,27 @@ git clone https://github.com/kpt-haddock/CPatMinerAda.git && cd CPatMinerAdacp
         ```
 3. Configure the settings file
 
-### Installing alr
+## Cloning Repositories
+
+CPatMinerAda comes with a collection of 82 Ada repositories with over 1.000 commits each;
+this collection is found in ```src/conf/repositories.json```. We also provide a list of 46 Ada repositories, each ranging between 500 and 1.000 commits;
+this collection is found in ```src/conf/test_repositories.json```. We provide the ```src/clone_repositories.py``` script to automate the cloning process.
+This script clones the top 50 repositories (based on stars) by default. To indicate where these projects should be cloned, configure the ```git_repositories_dir``` in the ```src/conf/settings.json``` file.
+For example:
+
+```json
+{
+   ...
+   "git_repositories_dir": "/home/username/repos"
+   ...
+}
+```
+
+After configuring the repositories folder, run the following command to clone the top 50 repositories:
+
+```shell script
+python3 src/clone_repositories.py
+```
 
 ## How to use
 You can run any step of the pipeline by using the following command:

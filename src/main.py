@@ -59,34 +59,32 @@ def main():
     elif current_mode == RunModes.COLLECT_CHANGE_GRAPHS:
         GitAnalyzer().build_change_graphs()
     elif current_mode == RunModes.MINE_PATTERNS:
-        storage_dir = settings.get('change_graphs_storage_dir')
-        file_names = os.listdir(storage_dir)
-        
-        logger.warning(f'Found {len(file_names)} files in storage directory.')
-
-        change_graphs = []
-        for file_num, file_name in enumerate(file_names):
-            file_path = os.path.join(storage_dir, file_name)
-            try:
-                with open(file_path, 'rb') as f:
-                    graphs = pickle.load(f)
-
-                for graph in graphs:
-                    change_graphs.append(pickle.loads(graph))
-            except:
-                logger.warning(f'Incorrect file {file_path}.')
-
-            logger.warning(f'Loaded [{1 + file_num}/{len(file_names)}] files.')
         logger.warning('Pattern mining has started.')
 
         miner = Miner()
         try:
-            miner.mine_patterns(change_graphs)
+            miner.mine_patterns(change_graphs_from_disk())
         except KeyboardInterrupt:
             logger.warning('KeyboardInterrupt: mined patterns will be stored before exit.')
         
         miner.print_patterns()
-                
+
+
+def change_graphs_from_disk():
+    storage_dir = settings.get('change_graphs_storage_dir')
+    file_names = os.listdir(storage_dir)
+
+    for file_num, file_name in enumerate(file_names):
+        file_path = os.path.join(storage_dir, file_name)
+        try:
+            with open(file_path, 'rb') as f:
+                graphs = pickle.load(f)
+
+            for graph in graphs:
+                logger.warning(f'Loading file [{1 + file_num}/{len(file_names)}].')
+                yield pickle.loads(graph)
+        except:
+            logger.warning(f'Incorrect file {file_path}.')
 
 
 if __name__ == '__main__':

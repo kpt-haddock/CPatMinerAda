@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import pickle
 import multiprocessing
@@ -68,10 +69,8 @@ class GitAnalyzer:
         logger.warning(f'Found {len(repo_names)} repositories, starting a build process')
 
         if GitAnalyzer.TRAVERSE_ASYNC:
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=10) as pool:
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=1000) as pool:
                 self._mine_changes(repo_names, pool=pool)
-                pool.close()
-                pool.join()
         else:
             self._mine_changes(repo_names)
 
@@ -87,7 +86,7 @@ class GitAnalyzer:
 
             if pool:
                 try:
-                    pool.starmap(self._build_and_store_change_graphs, commits)
+                    pool.map(self._build_and_store_change_graphs, commits)
                 except:
                     logger.error(f'Pool.map failed for repo {repo_name}', exc_info=True)
             else:
@@ -159,6 +158,8 @@ class GitAnalyzer:
     def _store_change_graphs(graphs):
         pickled_graphs = []
         for graph in graphs:
+            if len(graph.nodes) == 0:
+                continue
             if graph.repo_info and graph.repo_info.repo_name:
                 changegraph.export_graph_image(graph, os.path.join(GitAnalyzer.STORAGE_DIR,
                                                                    graph.repo_info.repo_name,
@@ -178,6 +179,7 @@ class GitAnalyzer:
 
     @staticmethod
     def _build_and_store_change_graphs(commit):
+        sys.setrecursionlimit(2**31-1)
         change_graphs = []
         commit_msg = commit['msg'].replace('\n', '; ')
         logger.info(f'Looking at commit #{commit["hash"]}, msg: "{commit_msg}"', show_pid=True)
@@ -302,16 +304,21 @@ class Method:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['ast']
+        if 'ast' in state:
+            del state['ast']
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        id_mapper = AdaNodeIdMapper()
-        context = lal.AnalysisContext()
-        unit = context.get_from_buffer(self.file_path, self.src)
-        accept(unit.root, id_mapper)
-        self.ast = id_mapper.id_node[self.ast_node_id]
+
+    def get_ast(self):
+        if not hasattr(self, 'ast'):
+            id_mapper = AdaNodeIdMapper()
+            context = lal.AnalysisContext()
+            unit = context.get_from_buffer(self.file_path, self.src)
+            accept(unit.root, id_mapper)
+            self.ast = id_mapper.id_node[self.ast_node_id]
+        return self.ast
 
 
 class RepoInfo:

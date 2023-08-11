@@ -1,5 +1,4 @@
 from __future__ import annotations
-from multimethod import multimethod
 from uuid import uuid1
 
 

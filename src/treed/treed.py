@@ -230,17 +230,16 @@ class TreedMapper:
 
     @staticmethod
     def get_status(status: int) -> str:
-        match status:
-            case TreedConstants.STATUS_MOVED:
-                return "MOVED"
-            case TreedConstants.STATUS_RELABELED:
-                return "RELABELED"
-            case TreedConstants.STATUS_UNCHANGED:
-                return "UNCHANGED"
-            case TreedConstants.STATUS_UNMAPPED:
-                return "UNMAPPED"
-            case _:
-                return "NOTHING_ELSE"
+        if status == TreedConstants.STATUS_MOVED:
+            return "MOVED"
+        elif status == TreedConstants.STATUS_RELABELED:
+            return "RELABELED"
+        elif status == TreedConstants.STATUS_UNCHANGED:
+            return "UNCHANGED"
+        elif status == TreedConstants.STATUS_UNMAPPED:
+            return "UNMAPPED"
+        else:
+            return "NOTHING_ELSE"
 
     def _mark_changes(self):
         self.__mark_changes1(self.__ast_m)

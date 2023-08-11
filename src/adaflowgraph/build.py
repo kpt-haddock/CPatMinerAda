@@ -1,9 +1,10 @@
 import html
+import logging
+
 import libadalang as lal
 
 import settings
 from log import logger
-from adaflowgraph import models
 from adaflowgraph.models import Node, DataNode, OperationNode, ExtControlFlowGraph, ControlNode, DataEdge, LinkType, \
     EntryNode, EmptyNode, ControlEdge, StatementNode
 from .ast_utils import get_node_key, get_node_short_name, get_node_full_name
@@ -447,6 +448,9 @@ class AdaNodeVisitor(NodeVisitor):
 
         return graph
 
+    def visit_BeginBlock(self, node: lal.BeginBlock):
+        return self.visit(node.f_stmts)
+
     def visit_BinOp(self, node: lal.BinOp):
         return self._visit_binop(node, node.f_left, node.f_right,
                                  op_name=node.f_op.__class__.__name__.lower()[2:],
@@ -517,6 +521,9 @@ class AdaNodeVisitor(NodeVisitor):
             graph.parallel_merge_graphs([left_graph, right_graph])
         return graph
 
+    def visit_ConcreteTypeDecl(self, node: lal.ConcreteTypeDecl):
+        raise NotImplementedError(node)
+
     def visit_DeclarativePart(self, node: lal.DeclarativePart):
         return self.visit(node.f_decls)
 
@@ -525,6 +532,7 @@ class AdaNodeVisitor(NodeVisitor):
         graph = self.visit(node.f_decls)
         graph.merge_graph(self.visit(node.f_stmts))
         self._pop_context()
+        return graph
 
     def visit_DeclExpr(self, node: lal.DeclExpr):
         raise NotImplementedError(node)
@@ -545,10 +553,14 @@ class AdaNodeVisitor(NodeVisitor):
         suffix_name = get_node_full_name(node)
         suffix_key = get_node_key(node)
 
-        if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
-            kind = DataNode.Kind.PACKAGE_USAGE
-        else:
-            kind = DataNode.Kind.VARIABLE_USAGE
+        try:
+            if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
+                kind = DataNode.Kind.PACKAGE_USAGE
+            else:
+                kind = DataNode.Kind.VARIABLE_USAGE
+        except:
+            logger.warning(f'Could not determine {node} first corresponding decl')
+            kind = DataNode.Kind.VARIABLE_USAGE  # Or undefined?
 
         data_node = DataNode(suffix_name, node, kind=kind, key=suffix_key)
         graph.add_node(data_node, link_type=LinkType.QUALIFIER, clear_sinks=True)
@@ -573,11 +585,9 @@ class AdaNodeVisitor(NodeVisitor):
         raise NotImplementedError(node)
 
     def visit_ForLoopSpec(self, node: lal.ForLoopSpec):
-        if isinstance(node.f_has_reverse, lal.ReversePresent):
-            raise NotImplementedError(lal.ReversePresent)
         if node.f_iter_filter:
             raise NotImplementedError(node.f_iter_filter)
-        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr)) # TODO: I don't think this is right
+        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr, node.f_has_reverse))  # TODO: I don't think this is right
 
     def visit_ForLoopStmt(self, node: lal.ForLoopStmt):
         control_node = ControlNode(ControlNode.Label.FOR, node, self.control_branch_stack)
@@ -693,6 +703,10 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_LoopStmt(self, node: lal.LoopStmt):
         raise NotImplementedError(node)
 
+    def visit_NamedStmt(self, node: lal.NamedStmt):
+        # TODO: label?
+        return self.visit(node.f_stmt)
+
     def visit_NullLiteral(self, node: lal.NullLiteral):
         return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
 
@@ -745,6 +759,33 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_QualExpr(self, node: lal.QualExpr):
         return self._visit_op(node.f_prefix.text, node, OperationNode.Kind.QUALIFIEDEXPR, [node.f_suffix])
 
+    def visit_QuantifiedExpr(self, node: lal.QuantifiedExpr):
+        self._switch_context(self.context.get_fork())
+        op_node = OperationNode(OperationNode.Label.QUANTIFIEDEXPR, node, self.control_branch_stack,
+                                kind=OperationNode.Kind.QUANTIFIEDEXPR)
+        
+        quantifier = self.visit(node.f_quantifier)
+        quantifier.add_node(op_node, link_type=LinkType.PARAMETER)
+
+        loop_spec = self.visit(node.f_loop_spec)
+
+        expr = self.visit(node.f_expr)
+        expr.add_node(op_node, link_type=LinkType.PARAMETER)
+
+        loop_spec.merge_graph(expr)
+
+        graph = self.create_graph()
+        graph.parallel_merge_graphs([quantifier, loop_spec])
+        self._pop_context()
+        return graph
+
+    def visit_QuantifierAll(self, node: lal.QuantifierAll):
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.QUANTIFIER))
+
+    def visit_QuantifierSome(self, node: lal.QuantifierSome):
+        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.QUANTIFIER))
+
+
     def visit_RaiseStmt(self, node: lal.RaiseStmt):
         return self._visit_dep_resetter(OperationNode.Label.RAISE, node, OperationNode.Kind.RAISE,
                                         reset_variables=True)
@@ -786,7 +827,6 @@ class AdaNodeVisitor(NodeVisitor):
         if isinstance(node.f_has_not_null, lal.NotNullPresent):
             raise NotImplementedError(node.f_has_not_null)
         return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.SUBTYPE_INDICATION))
-
 
     def visit_UnOp(self, node: lal.UnOp):
         op_name = node.f_op.__class__.__name__[2:]
@@ -893,7 +933,7 @@ class AdaNodeVisitor(NodeVisitor):
 
         return param_fgs
 
-    def _visit_var_decl(self, names, default_expr):
+    def _visit_var_decl(self, names, default_expr, reverse=None):
         for name in names:
             var_name = get_node_full_name(name)
             var_key = get_node_key(name)
@@ -903,7 +943,10 @@ class AdaNodeVisitor(NodeVisitor):
             if default_expr:
                 op_node = OperationNode(OperationNode.Label.ASSIGN, name, self.control_branch_stack,
                                         kind=OperationNode.Kind.ASSIGN)
-                graph = self.visit(default_expr)
+                if isinstance(reverse, lal.ReversePresent):
+                    graph = self._visit_op('reverse', reverse, OperationNode.Kind.UNARY, [default_expr])
+                else:
+                    graph = self.visit(default_expr)
 
                 sink_nums = []
                 for sink in graph.sinks:
@@ -925,9 +968,13 @@ class AdaNodeVisitor(NodeVisitor):
         var_name = get_node_full_name(node)
         var_key = get_node_key(node)
         graph = self.create_graph()
-        if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
-            kind = DataNode.Kind.PACKAGE_USAGE
-        else:
+        try:
+            if isinstance(node.p_first_corresponding_decl, lal.PackageDecl):
+                kind = DataNode.Kind.PACKAGE_USAGE
+            else:
+                kind = DataNode.Kind.VARIABLE_USAGE
+        except:
+            logging.debug('Could not determine first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE
         graph.add_node(DataNode(var_name, node, key=var_key, kind=kind))
         return graph
