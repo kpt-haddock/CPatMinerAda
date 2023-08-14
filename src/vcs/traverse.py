@@ -26,6 +26,7 @@ class GitAnalyzer:
     STORAGE_DIR = settings.get('change_graphs_storage_dir')
     STORE_INTERVAL = settings.get('change_graphs_store_interval', 50)
     TRAVERSE_ASYNC = settings.get('traverse_async', True)
+    TRAVERSE_MAX_COMMITS = settings.get('traverse_max_commits', 1000)
 
     MIN_DATE = None
     if settings.get('traverse_min_date', required=False):
@@ -100,7 +101,9 @@ class GitAnalyzer:
 
         repo_path = os.path.join(self.GIT_REPOSITORIES_DIR, repo_name)
         repo_url = self._get_repo_url(repo_path)
-        repo = Repository(repo_path, only_no_merge=True)
+        process = subprocess.run(['git', 'rev-parse', f'HEAD~{GitAnalyzer.TRAVERSE_MAX_COMMITS}'], capture_output=True, text=True)
+        git_head_hash = process.stdout
+        repo = Repository(repo_path, from_commit=git_head_hash, only_no_merge=True)
 
         commits = []
         for commit in repo.traverse_commits():
