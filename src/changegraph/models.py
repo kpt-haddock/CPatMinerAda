@@ -120,7 +120,8 @@ class ChangeNode:  # todo: create base class for pfg and cg
 
         created = ChangeNode(fg_node.statement_num, fg_node.ast, label, kind, fg_node.version,
                              sub_kind=getattr(fg_node, 'kind', None), original_label=fg_node.label)
-
+        created.start_pos = fg_node.start_pos
+        created.end_pos = fg_node.end_pos
         for prop in cls.Property.ALL:
             fg_node_prop = fg_node.get_property(prop)
             if fg_node_prop is None:

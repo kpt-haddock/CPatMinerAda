@@ -23,7 +23,6 @@ from utils.ada_node_visitor import accept
 
 class GitAnalyzer:
     GIT_REPOSITORIES_DIR = settings.get('git_repositories_dir')
-    GIT_REPOSITORIES = settings.get('repos')
     STORAGE_DIR = settings.get('change_graphs_storage_dir')
     STORE_INTERVAL = settings.get('change_graphs_store_interval', 50)
     TRAVERSE_ASYNC = settings.get('traverse_async', True)

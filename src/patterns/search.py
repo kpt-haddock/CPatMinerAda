@@ -325,6 +325,7 @@ class Miner:
                  f'<div>Commit: <a target="_blank" href="{repo_url}/commit/{commit_hash}">#{commit_hash}</a></div>\n' \
                  f'<div>File: {repo_info.old_method.file_path} to {repo_info.new_method.file_path}</div>\n' \
                  f'<div>Func: {repo_info.old_method.full_name} to {repo_info.new_method.full_name}</div>\n' \
+                 f'<div>SLoc Range: {repo_info.old_method.get_ast().sloc_range} to {repo_info.new_method.get_ast().sloc_range}</div>' \
                  f'<div>Link: ' \
                  f'<a target="_blank" href="' \
                  f'{cls._get_base_line_url(repo_info, version=ChangeNode.Version.BEFORE_CHANGES)}{line_number}">' \
@@ -413,9 +414,9 @@ class Miner:
     def _generate_pre_html(cls, fragment, repo_info, src, version):
         method = repo_info.old_method if version == ChangeNode.Version.BEFORE_CHANGES else repo_info.new_method
 
-        return f'<pre class="code language-python" ' \
+        return f'<pre class="code language-ada" ' \
                f'data-base-line-url="{cls._get_base_line_url(repo_info, version)}" ' \
-               f'data-line-number="{method.ast.sloc_range}" ' \
+               f'data-line-number="{method.get_ast().sloc_range}" ' \
                f'data-code-version="{version}">\n' \
                f'{cls._get_markup(fragment, src, version)}' \
                f'</pre>\n'
