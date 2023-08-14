@@ -368,33 +368,39 @@ class Pattern:
 
     def extend(self, iteration=1):
         sys.setrecursionlimit(10000)
-        logger.warning(f'Extending pattern with fragments cnt = {len(self.fragments)}')
+        current_pattern = self
 
-        start_time = time.time()
-        label_to_fragment_to_ext_list: Dict[str, Dict[Fragment, Set[Tuple[Fragment]]]] = {}
-        for fragment in self.fragments:
-            label_to_ext_list: Dict[str, Set[Tuple]] = fragment.get_label_to_ext_list()
-            for label, exts in label_to_ext_list.items():
-                d = label_to_fragment_to_ext_list.setdefault(label, {})
-                d[fragment] = exts
+        while True:
+            logger.warning(f'Extending pattern with fragments cnt = {len(current_pattern.fragments)}')
 
-        label_to_fragment_to_ext_list = {
-            k: v for k, v in label_to_fragment_to_ext_list.items()
-            if len(v) >= self.MIN_FREQUENCY
-        }
-        logger.warning(f'Dict label_to_fragment_to_ext_list with '
-                       f'{len(label_to_fragment_to_ext_list.items())} items was constructed', start_time=start_time)
+            start_time = time.time()
+            label_to_fragment_to_ext_list: Dict[str, Dict[Fragment, Set[Tuple[Fragment]]]] = {}
+            for fragment in current_pattern.fragments:
+                label_to_ext_list: Dict[str, Set[Tuple]] = fragment.get_label_to_ext_list()
+                for label, exts in label_to_ext_list.items():
+                    d = label_to_fragment_to_ext_list.setdefault(label, {})
+                    d[fragment] = exts
 
-        freq_group, freq = self._get_most_freq_group_and_freq(label_to_fragment_to_ext_list)
+            label_to_fragment_to_ext_list = {
+                k: v for k, v in label_to_fragment_to_ext_list.items()
+                if len(v) >= current_pattern.MIN_FREQUENCY
+            }
+            logger.warning(f'Dict label_to_fragment_to_ext_list with '
+                           f'{len(label_to_fragment_to_ext_list.items())} items was constructed', start_time=start_time)
 
-        if freq >= Pattern.MIN_FREQUENCY:
+            freq_group, freq = current_pattern._get_most_freq_group_and_freq(label_to_fragment_to_ext_list)
+
+            if freq < Pattern.MIN_FREQUENCY:
+                logger.log(logger.WARNING, f'Done extend() for a pattern')
+                return current_pattern
+
             extended_pattern = Pattern(freq_group, freq)
 
             new_nodes = []
-            for ix in range(len(self.repr.nodes), len(extended_pattern.repr.nodes)):
+            for ix in range(len(current_pattern.repr.nodes), len(extended_pattern.repr.nodes)):
                 new_nodes.append(extended_pattern.repr.nodes[ix])
 
-            old_nodes_s = '\n' + '\n'.join([f'\t{node}' for node in self.repr.nodes]) + '\n'
+            old_nodes_s = '\n' + '\n'.join([f'\t{node}' for node in current_pattern.repr.nodes]) + '\n'
             new_nodes_s = '\n' + '\n'.join([f'\t{node}' for node in new_nodes]) + '\n'
 
             logger.info(f'Pattern with old nodes: {old_nodes_s}'
@@ -403,10 +409,8 @@ class Pattern:
                         f'fragments cnt={len(extended_pattern.fragments)}, '
                         f'iteration = {iteration}')
 
-            return extended_pattern.extend(iteration=iteration + 1)
-        else:
-            logger.log(logger.WARNING, f'Done extend() for a pattern')
-            return self
+            current_pattern = extended_pattern
+            iteration += 1
 
     def _get_most_freq_group_and_freq(self, label_to_fragment_to_ext_list):
         sys.setrecursionlimit(10000)
