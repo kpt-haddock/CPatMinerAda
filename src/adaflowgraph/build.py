@@ -578,6 +578,12 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_ExplicitDeref(self, node: lal.ExplicitDeref):
         return self._visit_op(OperationNode.Label.DEREFERENCE, node, OperationNode.Kind.DEREFERENCE, [node.f_prefix])
 
+    def visit_ExprAlternativesList(self, node: lal.ExprAlternativesList):
+        if len(node) == 1:
+            return self.visit(node[0])
+
+        return self._visit_op('|', node, OperationNode.Kind.ALTERNATIVES, node)
+
     def visit_ExprFunction(self, node: lal.ExprFunction):
         raise NotImplementedError(node)
 
@@ -702,6 +708,11 @@ class AdaNodeVisitor(NodeVisitor):
 
     def visit_LoopStmt(self, node: lal.LoopStmt):
         raise NotImplementedError(node)
+
+    def visit_MembershipExpr(self, node: lal.MembershipExpr):
+        return self._visit_binop(node, node.f_expr, node.f_membership_exprs,
+                                 op_name=node.f_op.__class__.__name__.lower()[2:],
+                                 op_kind=OperationNode.Kind.BINARY)
 
     def visit_NamedStmt(self, node: lal.NamedStmt):
         # TODO: label?
