@@ -537,6 +537,12 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_DeclExpr(self, node: lal.DeclExpr):
         raise NotImplementedError(node)
 
+    def visit_DelayStmt(self, node: lal.DelayStmt):
+        if isinstance(node.f_has_until, lal.UntilPresent):
+            return self._visit_op(OperationNode.Label.DELAYUNTIL, node, OperationNode.Kind.DELAYUNTIL, [node.f_expr])
+
+        return self._visit_op(OperationNode.Label.DELAY, node, OperationNode.Kind.DELAY, [node.f_expr])
+
     def visit_DeltaAggregate(self, node: lal.DeltaAggregate):
         return self._visit_binop(node, node.f_ancestor_expr, node.f_assocs, op_name=OperationNode.Label.DELTA,
                                  op_kind=OperationNode.Kind.AGGREGATE)
