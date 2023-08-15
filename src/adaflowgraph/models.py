@@ -220,6 +220,7 @@ class ControlNode(StatementNode):
         IF = 'if'
         FOR = 'for'
         WHILE = 'while'
+        LOOP = 'loop'
         TRY = 'try'
         EXCEPT = 'except'
         ASSERT = 'assert'

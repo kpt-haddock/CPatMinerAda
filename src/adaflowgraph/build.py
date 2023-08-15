@@ -713,7 +713,13 @@ class AdaNodeVisitor(NodeVisitor):
         return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
 
     def visit_LoopStmt(self, node: lal.LoopStmt):
-        raise NotImplementedError(node)
+        control_node = ControlNode(ControlNode.Label.LOOP, node, self.control_branch_stack)
+        graph = self.create_graph(node=control_node)
+
+        stmts_graph = self._visit_control_node_body(control_node, node.f_stmts, True)
+        graph.merge_graph(stmts_graph)
+        graph.statement_sinks.clear()
+        return graph
 
     def visit_MembershipExpr(self, node: lal.MembershipExpr):
         return self._visit_binop(node, node.f_expr, node.f_membership_exprs,
