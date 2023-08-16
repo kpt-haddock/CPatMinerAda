@@ -101,12 +101,12 @@ class GitAnalyzer:
 
         repo_path = os.path.join(self.GIT_REPOSITORIES_DIR, repo_name)
         repo_url = self._get_repo_url(repo_path)
-        process = subprocess.run(['git', 'rev-parse', f'HEAD~{GitAnalyzer.TRAVERSE_MAX_COMMITS}'], capture_output=True, text=True)
-        git_head_hash = process.stdout
-        repo = Repository(repo_path, from_commit=git_head_hash, only_no_merge=True)
-
+        repo = Repository(repo_path, order='reverse', only_no_merge=True)
+        commits_traversed = 0
         commits = []
         for commit in repo.traverse_commits():
+            if commits_traversed >= GitAnalyzer.TRAVERSE_MAX_COMMITS:
+                break
             if not commit.parents:
                 continue
 
@@ -146,9 +146,11 @@ class GitAnalyzer:
                 except ValueError:
                     logger.warning(f'Could not find commit {mod}')
 
-            yield cut
-        # logger.log(logger.WARNING, 'Commits extracted', start_time=start)
-        # return commits
+            commits.append(cut)
+            commits_traversed += 1
+
+        logger.log(logger.WARNING, 'Commits extracted', start_time=start)
+        return commits
 
     @staticmethod
     def _get_repo_url(repo_path):
