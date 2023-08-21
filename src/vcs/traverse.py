@@ -146,11 +146,8 @@ class GitAnalyzer:
                 except ValueError:
                     logger.warning(f'Could not find commit {mod}')
 
-            commits.append(cut)
+            yield cut
             commits_traversed += 1
-
-        logger.log(logger.WARNING, 'Commits extracted', start_time=start)
-        return commits
 
     @staticmethod
     def _get_repo_url(repo_path):
