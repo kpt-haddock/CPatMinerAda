@@ -285,13 +285,34 @@ class AdaNodeVisitorHelper:
     def create_graph(self):
         return self.visitor.create_graph()
 
+    def get_type_expr_label(self, node: lal.SubtypeIndication):
+        if node.f_constraint:
+            return f'{node.text}(*)'
+        else:
+            return node.text
+
+    def get_exas_label(self, node: lal.Name):
+        if isinstance(node, lal.Identifier):
+            try:
+                return self.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr)
+            except:
+                return node.text
+        elif isinstance(node, lal.DottedName):
+            prefix_label = self.get_exas_label(node.f_prefix)
+            suffix_label = node.f_suffix.text
+            return f'{prefix_label}.{suffix_label}'
+        elif isinstance(node, lal.CallExpr):
+            return self.get_type_expr_label(node.f_name.p_first_corresponding_decl.f_type_expr)
+        else:
+            raise NotImplementedError('get_exas_label not implemented')
+
     def get_assign_graph_and_vars(self, op_node, target, prepared_value):
         if isinstance(target, lal.Name):
             var_name = get_node_full_name(target)
             var_key = get_node_key(target)
 
             value_graph = prepared_value
-            var_node = DataNode(var_name, target, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
+            var_node = DataNode(self.get_exas_label(target), target, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
 
             sink_nums = []
             for sink in value_graph.sinks:
@@ -502,7 +523,7 @@ class AdaNodeVisitor(NodeVisitor):
         raise NotImplementedError(node)
 
     def visit_CharLiteral(self, node: lal.CharLiteral):
-        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
+        return self.create_graph(node=DataNode('Char', node, kind=DataNode.Kind.LITERAL))
 
     def visit_ConcatOp(self, node: lal.ConcatOp):
         operands = iter(node.f_other_operands)
@@ -568,7 +589,7 @@ class AdaNodeVisitor(NodeVisitor):
             logger.warning(f'Could not determine {node} first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE  # Or undefined?
 
-        data_node = DataNode(suffix_name, node, kind=kind, key=suffix_key)
+        data_node = DataNode(self.visitor_helper.get_exas_label(node), node, kind=kind, key=suffix_key)
         graph.add_node(data_node, link_type=LinkType.QUALIFIER, clear_sinks=True)
         return graph
 
@@ -625,7 +646,7 @@ class AdaNodeVisitor(NodeVisitor):
 
         if name.lower() == 'true' or name.lower() == 'false':
             return self.create_graph(
-                node=DataNode(self._clear_literal_label(name), node, kind=DataNode.Kind.LITERAL))
+                node=DataNode('Boolean', node, kind=DataNode.Kind.LITERAL))
 
         try:
             if node.p_is_call:
@@ -710,7 +731,7 @@ class AdaNodeVisitor(NodeVisitor):
         return graph
 
     def visit_IntLiteral(self, node: lal.IntLiteral):
-        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
+        return self.create_graph(node=DataNode('Integer', node, kind=DataNode.Kind.LITERAL))
 
     def visit_LoopStmt(self, node: lal.LoopStmt):
         control_node = ControlNode(ControlNode.Label.LOOP, node, self.control_branch_stack)
@@ -814,7 +835,7 @@ class AdaNodeVisitor(NodeVisitor):
                                         reset_variables=True)
 
     def visit_RealLiteral(self, node: lal.RealLiteral):
-        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
+        return self.create_graph(node=DataNode('Real', node, kind=DataNode.Kind.LITERAL))
 
     def visit_RelationOp(self, node: lal.RelationOp):
         return self._visit_binop(node, node.f_left, node.f_right,
@@ -832,7 +853,7 @@ class AdaNodeVisitor(NodeVisitor):
         return graph
 
     def visit_StringLiteral(self, node: lal.StringLiteral):
-        return self.create_graph(node=DataNode(self._clear_literal_label(node.text), node, kind=DataNode.Kind.LITERAL))
+        return self.create_graph(node=DataNode('String', node, kind=DataNode.Kind.LITERAL))
 
     def visit_SubpBody(self, node: lal.SubpBody):
         if not self.fg.entry_node:
@@ -960,8 +981,11 @@ class AdaNodeVisitor(NodeVisitor):
         for name in names:
             var_name = get_node_full_name(name)
             var_key = get_node_key(name)
-
-            var_node = DataNode(var_name, name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
+            try:
+                var_node = DataNode(self.visitor_helper.get_type_expr_label(name.p_basic_decl.f_type_expr),
+                                    name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
+            except:
+                var_node = DataNode('UNKNOWN', name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
 
             if default_expr:
                 op_node = OperationNode(OperationNode.Label.ASSIGN, name, self.control_branch_stack,
@@ -999,5 +1023,9 @@ class AdaNodeVisitor(NodeVisitor):
         except:
             logging.debug('Could not determine first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE
-        graph.add_node(DataNode(var_name, node, key=var_key, kind=kind))
+        try:
+            graph.add_node(DataNode(self.visitor_helper.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr),
+                                    node, key=var_key, kind=kind))
+        except:
+            graph.add_node(DataNode(node.text, node, key=var_key, kind=kind))
         return graph
