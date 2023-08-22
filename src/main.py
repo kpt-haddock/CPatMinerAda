@@ -15,6 +15,7 @@ class RunModes:
     BUILD_ADA_FLOW_GRAPH = 'afg'
     BUILD_CHANGE_GRAPH = 'cg'
     COLLECT_CHANGE_GRAPHS = 'collect-cgs'
+    CHANGE_GRAPHS_INFO = 'cgs-info'
     MINE_PATTERNS = 'patterns'
     ALL = [BUILD_ADA_FLOW_GRAPH, BUILD_CHANGE_GRAPH, COLLECT_CHANGE_GRAPHS, MINE_PATTERNS]
 
@@ -68,6 +69,16 @@ def main():
             logger.warning('KeyboardInterrupt: mined patterns will be stored before exit.')
         
         miner.print_patterns()
+    elif current_mode == 'test':
+        sizes = []
+        for graph in change_graphs_from_disk():
+            sizes.append(len(graph.nodes))
+
+        print(min(sizes))
+        print(max(sizes))
+        print(len([size for size in sizes if size > 150]))
+    elif current_mode == RunModes.CHANGE_GRAPHS_INFO:
+        change_graphs_info(change_graphs_from_disk())
 
 
 def change_graphs_from_disk():
@@ -82,9 +93,25 @@ def change_graphs_from_disk():
 
             for graph in graphs:
                 logger.warning(f'Loading file [{1 + file_num}/{len(file_names)}].')
-                yield pickle.loads(graph)
+                g = pickle.loads(graph)
+                if len(g.nodes) > 100:
+                    logger.warning(f'Skipping graph with size {len(g.nodes)}')
+                    continue
+                yield g
         except:
             logger.warning(f'Incorrect file {file_path}.')
+
+
+def change_graphs_info(graphs):
+    graph_dict = {}
+    commit_dict = {}
+    for graph in graphs:
+        graph_set = graph_dict.setdefault(graph.repo_info.repo_name, set())
+        graph_set.add(graph)
+        commit_set = commit_dict.setdefault(graph.repo_info.repo_name, set())
+        commit_set.add(graph.repo_info.commit_hash)
+    for repo in graph_dict:
+        print(f'Repository {repo} extracted {len(graph_dict[repo])} change graphs, from {len(commit_dict[repo])} commits.')
 
 
 if __name__ == '__main__':
