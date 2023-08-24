@@ -1,5 +1,6 @@
 import html
 import logging
+import traceback
 
 import libadalang as lal
 
@@ -295,14 +296,23 @@ class AdaNodeVisitorHelper:
         if isinstance(node, lal.Identifier):
             try:
                 return self.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr)
-            except:
+            except Exception as e:
+                print('an exception occurred:', e)
+                traceback.print_exc()
                 return node.text
         elif isinstance(node, lal.DottedName):
             prefix_label = self.get_exas_label(node.f_prefix)
             suffix_label = node.f_suffix.text
             return f'{prefix_label}.{suffix_label}'
         elif isinstance(node, lal.CallExpr):
-            return self.get_type_expr_label(node.f_name.p_first_corresponding_decl.f_type_expr)
+            try:
+                if isinstance(node.f_name, lal.AttributeRef):
+                    return node.f_name.text
+                return self.get_type_expr_label(node.f_name.p_first_corresponding_decl.f_type_expr)
+            except Exception as e:
+                print('an exception occurred:', e)
+                traceback.print_exc()
+                return node.f_name.text
         else:
             raise NotImplementedError('get_exas_label not implemented')
 
@@ -508,7 +518,8 @@ class AdaNodeVisitor(NodeVisitor):
         graph.add_node(op_node, link_type=LinkType.PARAMETER, clear_sinks=True)
 
         if isinstance(node.f_name, lal.DottedName):
-            dotted_graph = self.visit(node.f_name)
+            name: lal.DottedName = node.f_name
+            dotted_graph = self.visit(name.f_prefix)
             dotted_graph.merge_graph(graph, link_node=next(iter(graph.sinks)), link_type=LinkType.RECEIVER)
             return dotted_graph
         return graph
@@ -585,7 +596,9 @@ class AdaNodeVisitor(NodeVisitor):
                 kind = DataNode.Kind.PACKAGE_USAGE
             else:
                 kind = DataNode.Kind.VARIABLE_USAGE
-        except:
+        except Exception as e:
+            print('an exception occurred:', e)
+            traceback.print_exc()
             logger.warning(f'Could not determine {node} first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE  # Or undefined?
 
@@ -651,7 +664,9 @@ class AdaNodeVisitor(NodeVisitor):
         try:
             if node.p_is_call:
                 return self.create_graph(node=OperationNode(name, node, self.control_branch_stack, kind=OperationNode.Kind.FUNC_CALL, key=key))
-        except:
+        except Exception as e:
+            print('an exception occurred:', e)
+            traceback.print_exc()
             logger.warning(f'Could not determine whether {node} is a call.')
 
         return self._visit_var_usage(node)
@@ -984,7 +999,9 @@ class AdaNodeVisitor(NodeVisitor):
             try:
                 var_node = DataNode(self.visitor_helper.get_type_expr_label(name.p_basic_decl.f_type_expr),
                                     name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
-            except:
+            except Exception as e:
+                print('an exception occurred:', e)
+                traceback.print_exc()
                 var_node = DataNode('UNKNOWN', name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
 
             if default_expr:
@@ -1020,12 +1037,16 @@ class AdaNodeVisitor(NodeVisitor):
                 kind = DataNode.Kind.PACKAGE_USAGE
             else:
                 kind = DataNode.Kind.VARIABLE_USAGE
-        except:
+        except Exception as e:
+            print('an exception occurred:', e)
+            traceback.print_exc()
             logging.debug('Could not determine first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE
         try:
             graph.add_node(DataNode(self.visitor_helper.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr),
                                     node, key=var_key, kind=kind))
-        except:
+        except Exception as e:
+            print('an exception occurred:', e)
+            traceback.print_exc()
             graph.add_node(DataNode(node.text, node, key=var_key, kind=kind))
         return graph
