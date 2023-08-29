@@ -23,7 +23,6 @@ class RunModes:
 def main():
     logger.info('------------------------------ Starting ------------------------------')
 
-    sys.setrecursionlimit(2 ** 31 - 1)
     multiprocessing.set_start_method('spawn', force=True)
 
     parser = argparse.ArgumentParser()
@@ -83,23 +82,24 @@ def main():
 
 def change_graphs_from_disk():
     storage_dir = settings.get('change_graphs_storage_dir')
-    file_names = os.listdir(storage_dir)
+    dir_names = os.listdir(storage_dir)
 
-    for file_num, file_name in enumerate(file_names):
-        file_path = os.path.join(storage_dir, file_name)
-        try:
-            with open(file_path, 'rb') as f:
-                graphs = pickle.load(f)
+    for dir_num, dir_name in enumerate(dir_names):
+        dir_path = os.path.join(storage_dir, dir_name)
+        file_names = os.listdir(dir_path)
+        logger.warning(f'Loading project [{1 + dir_num}/{len(dir_names)}].')
+        for file_num, file_name in enumerate(file_names):
+            file_path = os.path.join(dir_path, file_name)
+            try:
+                with open(file_path, 'rb') as f:
+                    graph = pickle.load(f)
 
-            for graph in graphs:
-                logger.warning(f'Loading file [{1 + file_num}/{len(file_names)}].')
-                g = pickle.loads(graph)
-                if len(g.nodes) > 100:
-                    logger.warning(f'Skipping graph with size {len(g.nodes)}')
-                    continue
-                yield g
-        except:
-            logger.warning(f'Incorrect file {file_path}.')
+                    if len(graph.nodes) > 100:
+                        logger.warning(f'Skipping graph with size {len(graph.nodes)}.')
+                        continue
+                    yield graph
+            except:
+                logger.warning(f'Incorrect file {file_path}.')
 
 
 def change_graphs_info(graphs):
