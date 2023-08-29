@@ -1,8 +1,8 @@
+import multiprocessing
 import os
 import sys
 import uuid
 import pickle
-import multiprocessing
 import time
 import json
 import subprocess
@@ -10,6 +10,7 @@ import datetime
 
 import libadalang as lal
 
+from multiprocessing.pool import Pool
 from log import logger
 from pathlib import Path
 from pydriller import Repository
@@ -67,12 +68,7 @@ class GitAnalyzer:
             return
 
         logger.warning(f'Found {len(repo_names)} repositories, starting a build process')
-
-        if GitAnalyzer.TRAVERSE_ASYNC:
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count(), maxtasksperchild=1000) as pool:
-                self._mine_changes(repo_names, pool=pool)
-        else:
-            self._mine_changes(repo_names)
+        self._mine_changes(repo_names)
 
     def _mine_changes(self, repo_names, pool=None):
         for repo_num, repo_name in enumerate(repo_names):
@@ -84,11 +80,11 @@ class GitAnalyzer:
             start = time.time()
             commits = self._extract_commits(repo_name)
 
-            if pool:
-                try:
-                    pool.map(self._build_and_store_change_graphs, commits)
-                except:
-                    logger.error(f'Pool.map failed for repo {repo_name}', exc_info=True)
+            if GitAnalyzer.TRAVERSE_ASYNC:
+                with Pool(processes=multiprocessing.cpu_count()) as pool:
+                    pool.imap_unordered(self._build_and_store_change_graphs, commits)
+                    pool.close()
+                    pool.join()
             else:
                 for commit in commits:
                     self._build_and_store_change_graphs(commit)
@@ -103,8 +99,9 @@ class GitAnalyzer:
         repo_url = self._get_repo_url(repo_path)
         repo = Repository(repo_path, order='reverse', only_no_merge=True)
         commits_traversed = 0
-        commits = []
+
         for commit in repo.traverse_commits():
+            logger.warning(f'commits traversed {commits_traversed}')
             if commits_traversed >= GitAnalyzer.TRAVERSE_MAX_COMMITS:
                 break
             if not commit.parents:
@@ -118,7 +115,7 @@ class GitAnalyzer:
                     'email': commit.author.email,
                     'name': commit.author.name
                 } if commit.author else None,
-                'num': len(commits) + 1,
+                'num': commits_traversed + 1,
                 'hash': commit.hash,
                 'dtm': commit.committer_date,
                 'msg': commit.msg,
@@ -156,32 +153,24 @@ class GitAnalyzer:
         return result.strip()
 
     @staticmethod
-    def _store_change_graphs(graphs):
-        pickled_graphs = []
-        for graph in graphs:
-            if len(graph.nodes) == 0:
-                continue
-            if graph.repo_info and graph.repo_info.repo_name:
-                changegraph.export_graph_image(graph, os.path.join(GitAnalyzer.STORAGE_DIR,
-                                                                   graph.repo_info.repo_name,
-                                                                   f'{str(uuid.uuid4())}.dot'))
-            try:
-                pickled = pickle.dumps(graph, protocol=5)
-                pickled_graphs.append(pickled)
-            except RecursionError:
-                logger.error(f'Unable to pickle graph, file_path={graph.repo_info.old_method.file_path}, '
-                             f'method={graph.repo_info.old_method.full_name}', exc_info=True)
+    def _store_change_graph(graph):
+        if len(graph.nodes) == 0:
+            return
+        # if graph.repo_info and graph.repo_info.repo_name:
+        #     changegraph.export_graph_image(graph, os.path.join(GitAnalyzer.STORAGE_DIR,
+        #                                                        graph.repo_info.repo_name,
+        #                                                        f'{str(uuid.uuid4())}.dot'))
 
         filename = uuid.uuid4().hex
-        logger.info(f'Trying to store graphs to {filename}', show_pid=True)
-        with open(os.path.join(GitAnalyzer.STORAGE_DIR, f'{filename}.pickle'), 'w+b') as f:
-            pickle.dump(pickled_graphs, f)
+        logger.info(f'Trying to store graph to {filename}', show_pid=True)
+        filename = os.path.join(GitAnalyzer.STORAGE_DIR, graph.repo_info.repo_name, f'{filename}.pickle')
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'w+b') as f:
+            pickle.dump(graph, f, protocol=5)
         logger.info(f'Storing graphs to {filename} finished', show_pid=True)
 
     @staticmethod
     def _build_and_store_change_graphs(commit):
-        sys.setrecursionlimit(2**31-1)
-        change_graphs = []
         commit_msg = commit['msg'].replace('\n', '; ')
         logger.info(f'Looking at commit #{commit["hash"]}, msg: "{commit_msg}"', show_pid=True)
 
@@ -234,15 +223,7 @@ class GitAnalyzer:
                                f'line={old_method.ast.sloc_range}', exc_info=True, show_pid=True)
                     continue
 
-                change_graphs.append(cg)
-
-                if len(change_graphs) >= GitAnalyzer.STORE_INTERVAL:
-                    GitAnalyzer._store_change_graphs(change_graphs)
-                    change_graphs.clear()
-
-        if change_graphs:
-            GitAnalyzer._store_change_graphs(change_graphs)
-            change_graphs.clear()
+                GitAnalyzer._store_change_graph(cg)
 
     @staticmethod
     def _extract_methods(file_path, src, repo_name):
