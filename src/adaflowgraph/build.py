@@ -295,7 +295,10 @@ class AdaNodeVisitorHelper:
     def get_exas_label(self, node: lal.Name):
         if isinstance(node, lal.Identifier):
             try:
-                return self.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr)
+                if node.p_first_corresponding_decl:
+                    if node.p_first_corresponding_decl.f_type_expr:
+                        return self.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr)
+                return node.text
             except Exception as e:
                 print('an exception occurred:', e)
                 traceback.print_exc()
@@ -308,11 +311,16 @@ class AdaNodeVisitorHelper:
             try:
                 if isinstance(node.f_name, lal.AttributeRef):
                     return node.f_name.text
-                return self.get_type_expr_label(node.f_name.p_first_corresponding_decl.f_type_expr)
+                if node.f_name.p_first_corresponding_decl:
+                    if node.f_name.p_first_corresponding_decl.f_type_expr:
+                        return self.get_type_expr_label(node.f_name.p_first_corresponding_decl.f_type_expr)
+                return node.f_name.text
             except Exception as e:
                 print('an exception occurred:', e)
                 traceback.print_exc()
                 return node.f_name.text
+        elif isinstance(node, lal.ExplicitDeref):
+            return f'{self.get_exas_label(node.f_prefix)}.all'
         else:
             raise NotImplementedError('get_exas_label not implemented')
 
@@ -633,7 +641,7 @@ class AdaNodeVisitor(NodeVisitor):
     def visit_ForLoopSpec(self, node: lal.ForLoopSpec):
         if node.f_iter_filter:
             raise NotImplementedError(node.f_iter_filter)
-        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr, node.f_has_reverse))  # TODO: I don't think this is right
+        return next(self._visit_var_decl([node.f_var_decl], node.f_iter_expr, node.f_has_reverse))
 
     def visit_ForLoopStmt(self, node: lal.ForLoopStmt):
         control_node = ControlNode(ControlNode.Label.FOR, node, self.control_branch_stack)
@@ -1043,8 +1051,11 @@ class AdaNodeVisitor(NodeVisitor):
             logging.debug('Could not determine first corresponding decl')
             kind = DataNode.Kind.VARIABLE_USAGE
         try:
-            graph.add_node(DataNode(self.visitor_helper.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr),
-                                    node, key=var_key, kind=kind))
+            if node.p_first_corresponding_decl:
+                if node.p_first_corresponding_decl.f_type_expr:
+                    graph.add_node(DataNode(self.visitor_helper.get_type_expr_label(node.p_first_corresponding_decl.f_type_expr),
+                                            node, key=var_key, kind=kind))
+            graph.add_node(DataNode(node.text, node, key=var_key, kind=kind))
         except Exception as e:
             print('an exception occurred:', e)
             traceback.print_exc()
