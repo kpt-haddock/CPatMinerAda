@@ -66,10 +66,10 @@ class Miner:
                 if node.version != ChangeNode.Version.BEFORE_CHANGES or not node.mapped:
                     continue
 
-                if not (node.kind == ChangeNode.Kind.OPERATION_NODE
-                        and node.sub_kind == ChangeNode.SubKind.OP_FUNC_CALL):
-                    # or node.kind == ChangeNode.Kind.CONTROL_NODE):
-                    continue
+                # if not (node.kind == ChangeNode.Kind.OPERATION_NODE
+                #         and node.sub_kind == ChangeNode.SubKind.OP_FUNC_CALL):
+                #     # or node.kind == ChangeNode.Kind.CONTROL_NODE):
+                #     continue
 
                 label = f'{node.label}~{node.mapped.label}'
                 arr = label_to_node_pairs.setdefault(label, [])
@@ -147,31 +147,32 @@ class Miner:
         if os.path.exists(self.OUTPUT_DIR):
             shutil.rmtree(self.OUTPUT_DIR)
 
-        with multiprocessing.pool.ThreadPool(processes=multiprocessing.cpu_count()) as thread_pool:
-            for size, patterns in self._size_to_patterns.items():
-                if not patterns:
-                    continue
+        for size, patterns in self._size_to_patterns.items():
+            if not patterns:
+                continue
 
-                logger.log(logger.WARNING, f'Exporting patterns of size {size}', show_pid=True)
+            logger.log(logger.WARNING, f'Exporting patterns of size {size}', show_pid=True)
 
-                same_size_dir = os.path.join(self.OUTPUT_DIR, str(size))
-                os.makedirs(same_size_dir, exist_ok=True)
+            same_size_dir = os.path.join(self.OUTPUT_DIR, str(size))
+            os.makedirs(same_size_dir, exist_ok=True)
 
-                fn = functools.partial(self._print_pattern, same_size_dir)
-                thread_pool.map(fn, patterns)
-
-                self._generate_contents(
-                    same_size_dir,
-                    f'Size {size} contents',
-                    [{'name': f'Pattern #{p.id}', 'url': f'{p.id}/details.html'}
-                     for p in sorted(patterns, key=lambda p: p.id)],
-                    styles='../../styles.css', has_upper_contents=True)
+            fn = functools.partial(self._print_pattern, same_size_dir)
+            for pattern in patterns:
+                fn(pattern)
 
             self._generate_contents(
-                self.OUTPUT_DIR,
-                'Contents',
-                [{'name': f'Size {size}', 'url': f'{size}/contents.html'}
-                 for size in sorted(self._size_to_patterns.keys())])
+                same_size_dir,
+                f'Size {size} contents',
+                [{'name': f'Pattern #{p.id}', 'url': f'{p.id}/details.html'}
+                 for p in sorted(patterns, key=lambda p: p.id)],
+                styles='../../styles.css', has_upper_contents=True)
+            patterns.clear()
+
+        self._generate_contents(
+            self.OUTPUT_DIR,
+            'Contents',
+            [{'name': f'Size {size}', 'url': f'{size}/contents.html'}
+             for size in sorted(self._size_to_patterns.keys())])
 
         logger.warning('Done patterns output')
 
