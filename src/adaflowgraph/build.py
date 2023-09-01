@@ -673,8 +673,6 @@ class AdaNodeVisitor(NodeVisitor):
             if node.p_is_call:
                 return self.create_graph(node=OperationNode(name, node, self.control_branch_stack, kind=OperationNode.Kind.FUNC_CALL, key=key))
         except Exception as e:
-            print('an exception occurred:', e)
-            traceback.print_exc()
             logger.warning(f'Could not determine whether {node} is a call.')
 
         return self._visit_var_usage(node)
@@ -1008,8 +1006,6 @@ class AdaNodeVisitor(NodeVisitor):
                 var_node = DataNode(self.visitor_helper.get_type_expr_label(name.p_basic_decl.f_type_expr),
                                     name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
             except Exception as e:
-                print('an exception occurred:', e)
-                traceback.print_exc()
                 var_node = DataNode('UNKNOWN', name, key=var_key, kind=DataNode.Kind.VARIABLE_DECL)
 
             if default_expr:

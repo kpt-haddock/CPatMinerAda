@@ -447,11 +447,11 @@ class ExtControlFlowGraph:
     def absolute_position_by_gumtree(fg1, fg2, gumtree: GumTree):
         for node in fg1.nodes:
             gumtree_node = gumtree.diff.src.trees[node.ast]
-            node.start_pos = gumtree_node.pos
+            node.start_pos = gumtree_node.pos - gumtree.diff.src.trees[fg1.entry_node.ast].pos
             node.end_pos = node.start_pos + gumtree_node.length
         for node in fg2.nodes:
             gumtree_node = gumtree.diff.dst.trees[node.ast]
-            node.start_pos = gumtree_node.pos
+            node.start_pos = gumtree_node.pos - gumtree.diff.dst.trees[fg2.entry_node.ast].pos
             node.end_pos = node.start_pos + gumtree_node.length
 
     def _get_transitive_change_nodes(self, gumtree):
