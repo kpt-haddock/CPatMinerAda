@@ -1,4 +1,5 @@
 from adaflowgraph.models import DataNode, Node, OperationNode, ControlNode, LinkType
+import libadalang as lal
 
 
 class ChangeGraph:
@@ -99,6 +100,26 @@ class ChangeNode:  # todo: create base class for pfg and cg
     def __setstate__(self, state):
         self.__dict__.update(state)
 
+    @staticmethod
+    def create_binop_label(node: lal.BinOp):
+        op = node.f_op
+        # Arithmetic Operators
+        if isinstance(op, (lal.OpDiv, lal.OpMinus, lal.OpPlus, lal.OpMod, lal.OpMult, lal.OpPow, lal.OpRem)):
+            return 'a'
+        if isinstance(op, lal.OpConcat):
+            return 'c'
+        # Equality and Relational Operators
+        elif isinstance(op, (lal.OpEq, lal.OpGt, lal.OpGte, lal.OpLt, lal.OpLte, lal.OpNeq)):
+            return 'r'
+        # Conditional Operators
+        elif isinstance(op, (lal.OpAnd, lal.OpOr, lal.OpXor, lal.OpAndThen, lal.OpOrElse)):
+            return 'l'
+        # Membership Operators
+        elif isinstance(op, (lal.OpNotIn, lal.OpIn)):
+            return 'm'
+        elif isinstance(op, lal.OpDoubleDot):
+            return  'd'
+
     @classmethod
     def create_from_fg_node(cls, fg_node):
         label = fg_node.label
@@ -113,6 +134,9 @@ class ChangeNode:  # todo: create base class for pfg and cg
 
         elif isinstance(fg_node, OperationNode):
             kind = cls.Kind.OPERATION_NODE
+            if isinstance(fg_node.ast, lal.BinOp):
+                binop_label = cls.create_binop_label(fg_node.ast)
+                label = chr(ord(binop_label) + 128)
         elif isinstance(fg_node, ControlNode):
             kind = cls.Kind.CONTROL_NODE
         else:
